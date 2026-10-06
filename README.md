@@ -4,7 +4,7 @@ Primeiro MVP do aplicativo de correção, separado do frontend web.
 
 ## Fases
 
-1. Autenticação do professor e seleção da escola.
+1. Autenticação do professor e seleção da escola (implementado).
 2. Lista de avaliações e turmas vindas da API.
 3. Captura da folha de respostas com `expo-camera`.
 4. Leitura OMR e envio do resultado para a API.

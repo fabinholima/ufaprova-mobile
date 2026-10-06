@@ -3,6 +3,7 @@ import { SafeAreaView, StyleSheet, Text, Pressable, View, TextInput, ActivityInd
 import * as SecureStore from 'expo-secure-store';
 
 type Screen = 'login' | 'home' | 'scan';
+type School = { id: string; name: string; city?: string; state?: string };
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://ufaprova-api.onrender.com';
 
 export default function App() {
@@ -11,6 +12,8 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
 
   async function signIn() {
     setError('');
@@ -24,10 +27,22 @@ export default function App() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Não foi possível entrar.');
       if (body.data?.token) await SecureStore.setItemAsync('ufaprova.session', body.data.token);
+      await loadSchools(body.data?.token);
       setScreen('home');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha de conexão com a API.');
     } finally { setLoading(false); }
+  }
+
+  async function loadSchools(sessionToken?: string) {
+    const token = sessionToken || await SecureStore.getItemAsync('ufaprova.session');
+    if (!token) return;
+    const response = await fetch(`${API_URL}/api/educator-profile`, { headers: { authorization: `Bearer ${token}` } });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || 'Não foi possível carregar as escolas.');
+    const list = body.data?.schools || [];
+    setSchools(list);
+    if (list.length) setSelectedSchool(list[0]);
   }
 
   return (
@@ -48,10 +63,16 @@ export default function App() {
         ) : screen === 'home' ? (
           <>
             <Text style={styles.subtitle}>
-              Selecione uma avaliação para iniciar a correção das folhas de respostas.
+              Selecione a escola em que você irá corrigir as avaliações.
             </Text>
+            {schools.length === 0 ? <Text style={styles.muted}>Nenhuma escola cadastrada.</Text> : schools.map((school) => (
+              <Pressable key={school.id} style={[styles.school, selectedSchool?.id === school.id && styles.schoolSelected]} onPress={() => setSelectedSchool(school)}>
+                <Text style={styles.schoolName}>{school.name}</Text>
+                {!!school.city && <Text style={styles.schoolLocation}>{school.city}{school.state ? ` - ${school.state}` : ''}</Text>}
+              </Pressable>
+            ))}
             <Pressable style={styles.primary} onPress={() => setScreen('scan')}>
-              <Text style={styles.primaryText}>Escanear folha de respostas</Text>
+              <Text style={styles.primaryText}>Continuar para avaliações</Text>
             </Pressable>
             <Text style={styles.muted}>Nenhuma avaliação selecionada</Text>
           </>
@@ -83,4 +104,8 @@ const styles = StyleSheet.create({
   secondary: { borderColor: '#cbd5e1', borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 28 },
   secondaryText: { color: '#0f172a', textAlign: 'center', fontWeight: '700', fontSize: 16 },
   muted: { color: '#94a3b8', marginTop: 18, textAlign: 'center' },
+  school: { backgroundColor: '#fff', borderColor: '#cbd5e1', borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 12 },
+  schoolSelected: { borderColor: '#2563eb', borderWidth: 2 },
+  schoolName: { color: '#0f172a', fontWeight: '700', fontSize: 16 },
+  schoolLocation: { color: '#64748b', marginTop: 4 },
 });
