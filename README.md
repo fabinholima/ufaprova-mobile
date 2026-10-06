@@ -55,7 +55,7 @@ Se a sessão expirar, os dados continuam locais e a sincronização aguarda novo
 
 ## Atualização necessária do backend
 
-O código correspondente está no repositório local `../caderno-bncc-atualizado`. Esta tarefa não aplica migrações nem publica serviços de produção.
+O código correspondente está no repositório local `../caderno-bncc-atualizado`. A API executa as migrações antes de iniciar, com trava transacional para evitar execuções simultâneas. O endpoint `/health` informa a revisão publicada e a versão da estrutura de sincronização.
 
 1. Publique as alterações de API e worker OMR e aplique `database/066_mobile_sync_manual_review.sql` antes de liberar o novo aplicativo.
 2. A migração adiciona a revisão das correções, o hash dos uploads e recibos de sincronização. Na pasta `services/api`, o comando habitual é `npm run migrate`, com `DATABASE_URL` configurado para o ambiente pretendido.
@@ -84,3 +84,11 @@ O servidor valida a instituição, os limites das notas e o tipo de questão, ma
 5. Altere a mesma correção no servidor antes de sincronizar uma nota offline. Confira que o app bloqueia o envio e permite comparar e refazer a operação com a revisão atual.
 6. Teste sessão expirada, segundo plano, perda de conexão durante envio e troca de conta. Nenhuma conta deve exibir ou enviar dados de outra.
 7. Valide nitidez, reconhecimento do QR e precisão OMR com fotos reais em Android/iOS. Os testes automatizados não medem a precisão do reconhecimento óptico.
+
+
+## Publicação verificada em 06/10/2026
+
+- Backend e worker OMR publicados no Render a partir de `8b67af76a8e25d7f2849d380496ec3e1c71e8234`.
+- `https://ufaprova-api.onrender.com/health` confirmou HTTP 200, a revisão publicada e `mobileSyncSchemaVersion: 1`; a migração 066 foi aplicada ao banco de produção.
+- CI do backend passou. Os testes HTTP em produção confirmaram que o login móvel sem `Origin` chega à validação, uma origem de navegador não autorizada continua bloqueada e a sincronização continua exigindo autenticação. Não foram criados alunos nem atribuídas notas de teste em produção.
+- A validação óptica, da câmera e do uso offline em aparelho físico permanece pendente. Para Android, use [Expo Go compatível com SDK 54](https://expo.dev/go?sdkVersion=54&platform=android&device=true) e inicie `npx expo start --lan` com computador e celular na mesma rede. O QR da sessão é temporário e não substitui uma versão instalável de produção.
