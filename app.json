@@ -6,8 +6,23 @@
     "orientation": "portrait",
     "scheme": "ufaprova",
     "userInterfaceStyle": "light",
-    "plugins": ["expo-camera", "expo-secure-store", "expo-sqlite"],
-    "ios": { "supportsTablet": true },
-    "android": { "package": "br.com.ufaprova.app" }
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permita que o UFA Prova use a câmera para fotografar folhas de respostas.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-secure-store",
+      "expo-sqlite"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "br.com.ufaprova.app"
+    }
   }
 }

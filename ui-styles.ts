@@ -1,0 +1,23 @@
+import { StyleSheet } from 'react-native';
+export const ui = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: '#f8fafc' },
+  container: { flexGrow: 1, padding: 24 },
+  eyebrow: { color: '#2563eb', fontWeight: '700', letterSpacing: 2, fontSize: 12 },
+  title: { color: '#0f172a', fontSize: 24, fontWeight: '700', marginTop: 20 },
+  text: { color: '#475569', fontSize: 16, lineHeight: 24, marginTop: 12 },
+  small: { color: '#475569', fontSize: 14, marginTop: 8 },
+  card: { backgroundColor: '#fff', borderColor: '#cbd5e1', borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 12 },
+  cardTitle: { color: '#0f172a', fontWeight: '700', fontSize: 16 },
+  selected: { borderColor: '#2563eb', backgroundColor: '#eff6ff' },
+  primary: { backgroundColor: '#0f172a', borderRadius: 12, padding: 16, marginTop: 20 },
+  primaryText: { color: '#fff', textAlign: 'center', fontWeight: '700', fontSize: 16 },
+  secondary: { borderColor: '#cbd5e1', borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 12 },
+  buttonText: { color: '#0f172a', textAlign: 'center', fontWeight: '700', fontSize: 16 },
+  input: { backgroundColor: '#fff', borderColor: '#cbd5e1', borderWidth: 1, borderRadius: 10, padding: 14, marginTop: 12, fontSize: 16, color: '#0f172a' },
+  preview: { width: '100%', aspectRatio: 3 / 4, backgroundColor: '#0f172a', marginTop: 20, borderRadius: 12 },
+  options: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
+  option: { padding: 14, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8 },
+  error: { color: '#b91c1c', marginTop: 12 },
+  success: { color: '#15803d', marginTop: 12, fontWeight: '700' },
+  disabled: { opacity: 0.45 },
+});
