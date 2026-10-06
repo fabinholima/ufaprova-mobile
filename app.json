@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "UFA Prova",
+    "slug": "ufaprova",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "ufaprova",
+    "userInterfaceStyle": "light",
+    "plugins": ["expo-camera", "expo-secure-store", "expo-sqlite"],
+    "ios": { "supportsTablet": true },
+    "android": { "package": "br.com.ufaprova.app" }
+  }
+}
