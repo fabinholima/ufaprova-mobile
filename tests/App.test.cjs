@@ -65,3 +65,11 @@ test('failed identity verification never persists a Google session',async t=>{
 });
 
 test('a student identity opens the student panel instead of teacher correction tools',async t=>{const previous=global.fetch;t.after(()=>global.fetch=previous);global.fetch=async()=>({ok:true,json:async()=>({data:{role:'student',user:{id:'student-id',displayName:'Aluno'}}})});const h=await setup(t,{login:true});await h.press('Entrar com Google');h.googleReady();await h.press('Concluir entrada com Google');assert(text(h.component.root).includes('Painel do aluno'));assert(!text(h.component.root).includes('Selecione a escola'));});
+
+test('native coordinator signup returns to login with the email filled and never saves a session',async t=>{
+ const previous=global.fetch;t.after(()=>global.fetch=previous);let calls=0;
+ global.fetch=async(url,options)=>{assert(url.endsWith('/api/auth/register'));assert.equal(options.headers['x-client'],'mobile');const payload=JSON.parse(options.body);assert.equal(payload.educatorProfile.professionalRole,'coordinator');assert.deepEqual(payload.educatorProfile.stages,['Ensino Médio']);assert.equal(payload.role,undefined);calls++;return Response.json({data:{verificationRequired:true}});};
+ const h=await setup(t,{login:true});await h.press('Criar conta de professor/coordenador');await h.press('Coordenador');await h.press('Ensino Médio');
+ for(const [label,value] of [['Nome completo','Coordenador Teste'],['E-mail do professor ou coordenador','coord@example.test'],['CPF','12345678909'],['Senha para nova conta','TestPassword123!'],['Confirmar senha','TestPassword123!'],['Nome da escola','Escola Teste'],['Endereço da escola','Rua Teste, 1'],['Cidade da escola','Campo Grande'],['Estado da escola (UF)','MS']])await renderer.act(async()=>h.component.root.findAllByType('TextInput').find(n=>n.props.accessibilityLabel===label).props.onChangeText(value));
+ await h.press('Criar minha conta');assert.equal(calls,1);assert.equal(h.credentials,null);assert(text(h.component.root).includes('Confirme o link enviado ao seu e-mail'));assert.equal(h.component.root.findAllByType('TextInput').find(n=>n.props.accessibilityLabel==='E-mail').props.value,'coord@example.test');
+});

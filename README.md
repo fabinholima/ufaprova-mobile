@@ -112,3 +112,7 @@ No portal, o professor abre **Turmas e alunos → Convidar alunos**, seleciona a
 O aluno vê apenas seus próprios vínculos e atividades das turmas aprovadas. Notas que ainda exigem revisão do professor não são exibidas. A sessão de aluno fica separada do armazenamento offline de correção.
 
 A API requer as migrações `070_class_invites.sql` e `071_student_accounts_class_links.sql`. As rotas e restrições estão documentadas no portal em `docs/class-invites-api.md`. Para portais com outro endereço, configure `EXPO_PUBLIC_PORTAL_URL`; o leitor aceita somente convites desse portal.
+
+## Cadastro de professor e coordenador no aplicativo
+
+Na entrada, use **Criar conta de professor/coordenador**. Escolha o perfil, informe nome, e-mail, CPF, senha e a primeira escola. Professores informam disciplinas e séries; coordenadores selecionam as etapas de ensino. O servidor cria conta, perfil e escola na mesma transação. Confirme o e-mail pelo link recebido e entre no aplicativo. Escolher Coordenador define o perfil profissional; não concede permissões sobre outras escolas nem administração geral.

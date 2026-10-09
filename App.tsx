@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Linking, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
+import EducatorRegistrationScreen from './EducatorRegistrationScreen';
 import StudentScreen from './StudentScreen';
 import {STUDENT_SESSION_KEY} from './student-api';
 import CaptureScreen from './CaptureScreen';
@@ -24,6 +25,7 @@ type SchoolClass = { id: string; name: string; grade?: string; schoolYear?: numb
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://ufaprova-api.onrender.com';
 
 export default function App() {
+  const [educatorRegistration,setEducatorRegistration]=useState(false);
   const [studentAccess,setStudentAccess]=useState(false);
   useEffect(()=>{void SecureStore.getItemAsync(STUDENT_SESSION_KEY).then(raw=>{if(raw){const value=JSON.parse(raw);if(typeof value.token==='string'&&value.apiUrl===API_URL)setStudentAccess(true);}}).catch(()=>{});},[]);
   const [store, setStore] = useState<OfflineStore | null>(null);
@@ -237,6 +239,7 @@ export default function App() {
     setAssessment({ id: record.sheet.assessmentId, title: record.sheet.assessmentTitle });
     setSchoolClass({ id: record.sheet.classId, name: record.sheet.className }); setScreen('scan');
   }
+  if(educatorRegistration)return <EducatorRegistrationScreen apiUrl={API_URL} onBack={()=>setEducatorRegistration(false)} onCreated={(value,role)=>{setEducatorRegistration(false);setEmail(value);setPassword('');setShowPassword(false);setError('');setMessage(`Conta de ${role==='coordinator'?'coordenador':'professor'} criada. Confirme o link enviado ao seu e-mail e depois entre aqui.`);}} />;
   if(studentAccess)return <StudentScreen apiUrl={API_URL} onBack={()=>setStudentAccess(false)} />;
   return <SafeAreaView style={ui.safe}><ScrollView contentContainerStyle={ui.container} keyboardShouldPersistTaps="handled">
     <Text style={ui.eyebrow}>UFA PROVA</Text><Text style={ui.title}>Correção de avaliações</Text>
@@ -255,6 +258,7 @@ export default function App() {
         <Pressable disabled={loading} style={ui.secondary} onPress={() => { void finishGoogleSignIn(); }}><Text style={ui.buttonText}>Concluir entrada com Google</Text></Pressable>
         <Pressable disabled={loading} style={ui.passwordToggle} onPress={cancelGoogle}><Text style={ui.linkText}>Cancelar entrada com Google</Text></Pressable>
       </>}
+      <Pressable accessibilityRole="button" disabled={loading||!!googleAttempt} style={ui.secondary} onPress={()=>setEducatorRegistration(true)}><Text style={ui.buttonText}>Criar conta de professor/coordenador</Text></Pressable>
       {!store && <Pressable style={ui.secondary} onPress={() => { void initialize(); }}><Text style={ui.buttonText}>Reabrir armazenamento local</Text></Pressable>}
     </> : <>
       <Text style={ui.small}>{account?.displayName} • {connected ? 'Conectado' : 'Sem conexão'}</Text>
