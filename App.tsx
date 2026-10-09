@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, AppState, Linking, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
+import StudentScreen from './StudentScreen';
+import {STUDENT_SESSION_KEY} from './student-api';
 import CaptureScreen from './CaptureScreen';
 import type { CapturedSheet } from './CaptureScreen';
 import RecordScreen, { localStatus } from './RecordScreen';
@@ -12,6 +14,8 @@ import { createSynchronizer, refreshRecord } from './offline-sync';
 import { prepareImage } from './prepare-image';
 import { ScanApiError } from './scan-api';
 import { ui } from './ui-styles';
+import { startGoogleLogin, checkGoogleLogin } from './google-login';
+import type { GoogleAttempt } from './google-login';
 
 type Screen = 'login' | 'home' | 'assessments' | 'scan' | 'records' | 'record';
 type School = { id: string; name: string; city?: string; state?: string };
@@ -20,6 +24,8 @@ type SchoolClass = { id: string; name: string; grade?: string; schoolYear?: numb
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://ufaprova-api.onrender.com';
 
 export default function App() {
+  const [studentAccess,setStudentAccess]=useState(false);
+  useEffect(()=>{void SecureStore.getItemAsync(STUDENT_SESSION_KEY).then(raw=>{if(raw){const value=JSON.parse(raw);if(typeof value.token==='string'&&value.apiUrl===API_URL)setStudentAccess(true);}}).catch(()=>{});},[]);
   const [store, setStore] = useState<OfflineStore | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const ownerRef = useRef<string | null>(null);
@@ -33,6 +39,10 @@ export default function App() {
   const [authExpired, setAuthExpired] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [googleAttempt, setGoogleAttempt] = useState<GoogleAttempt | null>(null);
+  const googleChecking = useRef(false);
+  const googleAttemptRef = useRef<GoogleAttempt | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [schools, setSchools] = useState<School[]>([]);
@@ -125,6 +135,56 @@ export default function App() {
       }
     }
   }
+  async function acceptSession(token: string, storage: OfflineStore) {
+    const identityResponse = await fetch(`${API_URL}/api/auth/me`, { headers: { authorization: `Bearer ${token}`, 'x-client': 'mobile' }, signal: AbortSignal.timeout(15_000) });
+    const identityBody = await identityResponse.json();
+    if (!identityResponse.ok) throw new Error(identityBody.error || 'Não foi possível confirmar a instituição da conta.');
+    if(identityBody.data?.role === 'student'){await SecureStore.setItemAsync(STUDENT_SESSION_KEY,JSON.stringify({apiUrl:API_URL,token}));setStudentAccess(true);setPassword('');return;}
+    const current = accountFromLogin(API_URL, identityBody.data);
+    ownerRef.current = current.owner;
+    await SecureStore.deleteItemAsync(ACCOUNT_KEY);
+    await SecureStore.setItemAsync('ufaprova.session', token);
+    await SecureStore.setItemAsync(ACCOUNT_KEY, JSON.stringify({ ...current, sessionToken: token }));
+    await activate(current, storage); setPassword(''); setShowPassword(false);
+    await loadCatalog(current, storage);
+  }
+  function cancelGoogle() {
+    googleAttemptRef.current = null; setGoogleAttempt(null); setMessage('');
+  }
+  async function googleSignIn() {
+    if (loading || !store || googleAttemptRef.current) return;
+    setLoading(true); setError(''); setMessage('');
+    try {
+      const attempt = await startGoogleLogin(API_URL);
+      googleAttemptRef.current = attempt; setGoogleAttempt(attempt);
+      setMessage('Escolha sua conta Google no navegador e depois volte ao UFA Prova para concluir a entrada.');
+      await Linking.openURL(attempt.browserUrl);
+    } catch (err) { cancelGoogle(); setError(err instanceof Error ? err.message : 'Não foi possível abrir a entrada com Google.'); }
+    finally { setLoading(false); }
+  }
+  const finishGoogleSignIn = useCallback(async () => {
+    const attempt = googleAttemptRef.current;
+    if (!attempt || !store || googleChecking.current) return;
+    googleChecking.current = true;
+    try {
+      const ready = await checkGoogleLogin(API_URL, attempt);
+      if (googleAttemptRef.current !== attempt || !ready) return;
+      setLoading(true);
+      await acceptSession(attempt.token, store);
+      cancelGoogle();
+    } catch (err) {
+      if (googleAttemptRef.current === attempt) {
+        cancelGoogle(); setError(err instanceof Error ? err.message : 'Não foi possível concluir a entrada com Google.');
+      }
+    } finally { googleChecking.current = false; setLoading(false); }
+  }, [store]);
+  useEffect(() => {
+    if (!googleAttempt || !active || !connected) return;
+    void finishGoogleSignIn();
+    const timer = setInterval(() => { void finishGoogleSignIn(); }, 3000);
+    return () => clearInterval(timer);
+  }, [googleAttempt, active, connected, finishGoogleSignIn]);
+  useEffect(() => () => { googleAttemptRef.current = null; }, []);
   async function signIn() {
     if (loading || !store) return;
     setLoading(true); setError(''); setMessage('');
@@ -133,16 +193,7 @@ export default function App() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Não foi possível entrar.');
       if (typeof body.data?.token !== 'string' || !body.data.token) throw new Error('A API não retornou uma sessão válida.');
-      const identityResponse = await fetch(`${API_URL}/api/auth/me`, { headers: { authorization: `Bearer ${body.data.token}`, 'x-client': 'mobile' } });
-      const identityBody = await identityResponse.json();
-      if (!identityResponse.ok) throw new Error(identityBody.error || 'Não foi possível confirmar a instituição da conta.');
-      const current = accountFromLogin(API_URL, identityBody.data);
-      // Switch the account guard before replacing its token so another account's queued requests cannot use it.
-      await SecureStore.deleteItemAsync(ACCOUNT_KEY);
-      await SecureStore.setItemAsync('ufaprova.session', body.data.token);
-      await SecureStore.setItemAsync(ACCOUNT_KEY, JSON.stringify({ ...current, sessionToken: body.data.token }));
-      await activate(current, store); setPassword('');
-      await loadCatalog(current, store);
+      await acceptSession(body.data.token, store);
     } catch (err) { setError(err instanceof Error ? err.message : 'Falha de conexão com a API.'); }
     finally { setLoading(false); }
   }
@@ -186,14 +237,24 @@ export default function App() {
     setAssessment({ id: record.sheet.assessmentId, title: record.sheet.assessmentTitle });
     setSchoolClass({ id: record.sheet.classId, name: record.sheet.className }); setScreen('scan');
   }
+  if(studentAccess)return <StudentScreen apiUrl={API_URL} onBack={()=>setStudentAccess(false)} />;
   return <SafeAreaView style={ui.safe}><ScrollView contentContainerStyle={ui.container} keyboardShouldPersistTaps="handled">
     <Text style={ui.eyebrow}>UFA PROVA</Text><Text style={ui.title}>Correção de avaliações</Text>
     {booting ? <ActivityIndicator accessibilityLabel="Abrindo dados locais" /> : screen === 'login' ? <>
+      <Pressable accessibilityRole="button" style={ui.secondary} onPress={()=>setStudentAccess(true)}><Text style={ui.buttonText}>Sou aluno · entrar ou criar conta</Text></Pressable>
       <Text style={ui.text}>Entre uma vez com internet. Depois, as escolas, avaliações e turmas já carregadas ficam disponíveis neste aparelho.</Text>
       <TextInput style={ui.input} accessibilityLabel="E-mail" autoCapitalize="none" keyboardType="email-address" placeholder="E-mail" value={email} onChangeText={setEmail} />
-      <TextInput style={ui.input} accessibilityLabel="Senha" secureTextEntry placeholder="Senha" value={password} onChangeText={setPassword} />
+      <TextInput style={ui.input} accessibilityLabel="Senha" secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder="Senha" value={password} onChangeText={setPassword} />
+      <Pressable accessibilityRole="button" accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'} style={ui.passwordToggle} onPress={() => setShowPassword(value => !value)}><Text style={ui.linkText}>{showPassword ? 'Ocultar senha' : 'Mostrar senha'}</Text></Pressable>
       {!!error && <Text style={ui.error}>{error}</Text>}
-      <Pressable disabled={loading || !store} style={[ui.primary, (loading || !store) && ui.disabled]} onPress={signIn}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={ui.primaryText}>Entrar</Text>}</Pressable>
+      <Pressable disabled={loading || !store || !!googleAttempt} style={[ui.primary, (loading || !store || !!googleAttempt) && ui.disabled]} onPress={signIn}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={ui.primaryText}>Entrar</Text>}</Pressable>
+      <Text style={ui.separator}>ou</Text>
+      <Pressable accessibilityRole="button" disabled={loading || !store || !!googleAttempt} style={[ui.secondary, (loading || !store || !!googleAttempt) && ui.disabled]} onPress={googleSignIn}><Text style={ui.buttonText}>Entrar com Google</Text></Pressable>
+      {!!message && <Text accessibilityLiveRegion="polite" style={ui.small}>{message}</Text>}
+      {!!googleAttempt && <>
+        <Pressable disabled={loading} style={ui.secondary} onPress={() => { void finishGoogleSignIn(); }}><Text style={ui.buttonText}>Concluir entrada com Google</Text></Pressable>
+        <Pressable disabled={loading} style={ui.passwordToggle} onPress={cancelGoogle}><Text style={ui.linkText}>Cancelar entrada com Google</Text></Pressable>
+      </>}
       {!store && <Pressable style={ui.secondary} onPress={() => { void initialize(); }}><Text style={ui.buttonText}>Reabrir armazenamento local</Text></Pressable>}
     </> : <>
       <Text style={ui.small}>{account?.displayName} • {connected ? 'Conectado' : 'Sem conexão'}</Text>

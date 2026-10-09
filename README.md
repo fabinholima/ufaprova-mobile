@@ -21,7 +21,17 @@ npm test
 npx expo start
 ```
 
-Configure `EXPO_PUBLIC_API_URL` para usar outra API. O projeto usa Expo SDK 54. Use uma versão compatível do Expo Go ou uma compilação de desenvolvimento. Permissões alteradas em `app.json` exigem recompilar o aplicativo instalado.
+Configure `EXPO_PUBLIC_API_URL` para usar outra API. O projeto usa Expo SDK 57. Use uma versão compatível do Expo Go ou uma compilação de desenvolvimento. Permissões alteradas em `app.json` exigem recompilar o aplicativo instalado.
+
+## Entrada com Google e senha
+
+O campo de senha oferece **Mostrar senha** e **Ocultar senha**. A senha começa oculta e volta a ficar oculta depois da entrada.
+
+**Entrar com Google** abre o navegador do celular. Escolha a conta e retorne ao app; a confirmação acontece com o aplicativo aberto, ou pelo botão **Concluir entrada com Google**. O acesso exige uma conta Google já cadastrada no portal. Contas criadas com senha não são vinculadas automaticamente ao Google.
+
+A API precisa publicar os endpoints móveis e aplicar `database/069_mobile_google_login.sql`. Configure no servidor `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` (callback HTTPS da API) e `AUTH_FRONTEND_URL`, como no acesso Google do portal. `GET /api/auth/config` deve informar `google: true` e `googleMobile: true`. Nenhum segredo Google deve ser colocado no app.
+
+Endpoints: `POST /api/auth/google/mobile/start` recebe o hash de uma chave aleatória criada no aparelho e devolve o endereço do navegador; `GET /api/auth/google/mobile/browser` vincula o navegador à tentativa e inicia o OAuth existente com PKCE; `POST /api/auth/google/mobile/status` verifica a conclusão com a chave privada do aparelho. Tentativas expiram em dez minutos. O navegador não recebe a sessão do aplicativo. O app confirma a identidade em `/api/auth/me` antes de guardar a sessão no SecureStore.
 
 Os testes de armazenamento usam `node:sqlite` (Node 22.13+). Na pasta `../caderno-bncc-atualizado/services/api`, execute `node --test` para os testes de API. Para a integração transacional, configure `MOBILE_SYNC_TEST_DATABASE_URL` apontando para um PostgreSQL de teste e execute `node --test mobile-sync.integration.test.mjs`; o teste cria e remove seu próprio schema.
 
@@ -29,7 +39,7 @@ As telas e módulos nativos são simulados; o contrato HTTP é exercitado com se
 
 ## Uso offline
 
-Entre com internet pelo menos uma vez e carregue escolas, avaliações e turmas. O app mantém a última conta no SecureStore e as listas no [Expo SQLite](https://docs.expo.dev/versions/v54.0.0/sdk/sqlite/), separadas por URL da API, professor e instituição.
+Entre com internet pelo menos uma vez e carregue escolas, avaliações e turmas. O app mantém a última conta no SecureStore e as listas no [Expo SQLite](https://docs.expo.dev/versions/v57.0.0/sdk/sqlite/), separadas por URL da API, professor e instituição.
 
 Ao tocar em **Usar esta foto**, a imagem é preparada e salva no SQLite com escola, avaliação e turma. O JPEG conserva a página inteira, limita o lado maior a 2600 pixels e usa qualidade de 90%. Ele não depende do arquivo temporário da câmera. O limite de envio continua sendo 8 milhões de caracteres no data URL, incluindo o prefixo.
 
@@ -43,7 +53,7 @@ Notas e comentários são salvos como rascunho a cada alteração. Depois de con
 
 ## Sincronização e conflitos
 
-A sincronização usa [NetInfo](https://docs.expo.dev/versions/v54.0.0/sdk/netinfo/) e o estado do aplicativo. Com conexão e app em primeiro plano, verifica os trabalhos pendentes a cada 10 segundos. Também pode ser acionada por **Sincronizar agora**. Falhas transitórias recebem novas tentativas com atraso crescente, de 5 segundos a 5 minutos. Consultas e operações da fila nunca usam o token de outra conta; identidade e token são lidos juntos do SecureStore. A conta é vinculada à instituição confirmada por `/api/auth/me`, e o servidor verifica a instituição esperada em cada envio.
+A sincronização usa [NetInfo](https://docs.expo.dev/versions/v57.0.0/sdk/netinfo/) e o estado do aplicativo. Com conexão e app em primeiro plano, verifica os trabalhos pendentes a cada 10 segundos. Também pode ser acionada por **Sincronizar agora**. Falhas transitórias recebem novas tentativas com atraso crescente, de 5 segundos a 5 minutos. Consultas e operações da fila nunca usam o token de outra conta; identidade e token são lidos juntos do SecureStore. A conta é vinculada à instituição confirmada por `/api/auth/me`, e o servidor verifica a instituição esperada em cada envio.
 
 Cada foto tem um UUID estável enviado como `clientScanId`. Correções usam um `clientMutationId` estável. A operação mantém também o ID original da correção: uma folha reassociada no servidor exige nova conferência, sem transferir notas para outro aluno automaticamente. O backend devolve o resultado original quando uma operação é repetida após perda de resposta ou reinício, sem criar outra digitalização nem reaplicar a nota.
 
@@ -91,4 +101,14 @@ O servidor valida a instituição, os limites das notas e o tipo de questão, ma
 - Backend e worker OMR publicados no Render a partir de `8b67af76a8e25d7f2849d380496ec3e1c71e8234`.
 - `https://ufaprova-api.onrender.com/health` confirmou HTTP 200, a revisão publicada e `mobileSyncSchemaVersion: 1`; a migração 066 foi aplicada ao banco de produção.
 - CI do backend passou. Os testes HTTP em produção confirmaram que o login móvel sem `Origin` chega à validação, uma origem de navegador não autorizada continua bloqueada e a sincronização continua exigindo autenticação. Não foram criados alunos nem atribuídas notas de teste em produção.
-- A validação óptica, da câmera e do uso offline em aparelho físico permanece pendente. Para Android, use [Expo Go compatível com SDK 54](https://expo.dev/go?sdkVersion=54&platform=android&device=true) e inicie `npx expo start --lan` com computador e celular na mesma rede. O QR da sessão é temporário e não substitui uma versão instalável de produção.
+- A validação óptica, da câmera e do uso offline em aparelho físico permanece pendente. Para Android, use [Expo Go compatível com SDK 57](https://expo.dev/go?sdkVersion=57&platform=android&device=true) e inicie `npx expo start --lan` com computador e celular na mesma rede. O QR da sessão é temporário e não substitui uma versão instalável de produção.
+
+## Contas de aluno e convites de turma
+
+O acesso **Sou aluno** oferece cadastro com e-mail e senha, entrada pelo Google, conferência do código da turma e leitura do QR Code. Cadastros por e-mail precisam de confirmação pelo link recebido; depois o aluno entra no aplicativo.
+
+No portal, o professor abre **Turmas e alunos → Convidar alunos**, seleciona a escola cadastrada e compartilha código/link/QR. A solicitação fica pendente até a confirmação explícita do cadastro pelo responsável. Nenhum cadastro existente é associado automaticamente por nome.
+
+O aluno vê apenas seus próprios vínculos e atividades das turmas aprovadas. Notas que ainda exigem revisão do professor não são exibidas. A sessão de aluno fica separada do armazenamento offline de correção.
+
+A API requer as migrações `070_class_invites.sql` e `071_student_accounts_class_links.sql`. As rotas e restrições estão documentadas no portal em `docs/class-invites-api.md`. Para portais com outro endereço, configure `EXPO_PUBLIC_PORTAL_URL`; o leitor aceita somente convites desse portal.
