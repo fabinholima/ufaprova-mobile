@@ -46,19 +46,20 @@ export function createScanClient(apiUrl: string, token: () => Promise<string | n
     }
   }
   return {
-    async upload(imageDataUrl: string, clientScanId?: string): Promise<{ id: string; status: Scan['status'] }> {
-      const data = await request('/api/card-scans', { method: 'POST', body: JSON.stringify({ imageDataUrl, clientScanId, expectedInstitutionId: identity?.institutionId }) });
+    async upload(imageDataUrl: string, clientScanId?: string, expectedApplicationId?: string): Promise<{ id: string; status: Scan['status'] }> {
+      const data = await request('/api/card-scans', { method: 'POST', body: JSON.stringify({ imageDataUrl, clientScanId, ...(expectedApplicationId ? {expectedApplicationId:requireId(expectedApplicationId)} : {}), expectedInstitutionId: identity?.institutionId }) });
       try {
         const record = data as { id?: unknown; status?: unknown };
         return { id: requireId(record.id), status: parseStatus(record.status) };
       } catch { throw new ScanApiError('Não foi possível identificar o envio recebido pela API. Confira as leituras no portal antes de reenviar.', true); }
     },
-    async capabilities(): Promise<void> {
-      const data = await request('/api/mobile-sync') as { version?: number; idempotentUploads?: boolean; manualReview?: boolean; userId?: string; institutionId?: string };
+    async capabilities(requireApplicationScope = false): Promise<void> {
+      const data = await request('/api/mobile-sync') as { applicationScopedUploads?: boolean; version?: number; idempotentUploads?: boolean; manualReview?: boolean; userId?: string; institutionId?: string };
       if (identity && (data.userId !== identity.userId || data.institutionId !== identity.institutionId)) throw new ScanApiError('O contexto da conta mudou no servidor. Entre novamente antes de sincronizar.', false, 401);
+      if(requireApplicationScope && data.applicationScopedUploads !== true)throw new ScanApiError('O servidor precisa ser atualizado para corrigir o cartão na aplicação selecionada. Sua foto continua salva no aparelho.',false,503);
       if (data.version !== 1 || !data.idempotentUploads || !data.manualReview) throw new ScanApiError('O servidor precisa ser atualizado para sincronizar as correções offline.', false, 503);
     },
-    async catalog(path: '/api/educator-profile' | '/api/assessments' | '/api/classes'): Promise<unknown> { return request(path); },
+    async catalog(path: '/api/educator-profile' | '/api/assessments' | '/api/classes' | '/api/assessment-applications'): Promise<unknown> { return request(path); },
     async submission(id: string): Promise<Submission> {
       const result = parseSubmission(await request(`/api/submissions/${requireId(id)}`));
       if (result.id !== id) throw new Error('A API retornou outra correção.');

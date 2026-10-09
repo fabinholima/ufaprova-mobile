@@ -116,3 +116,13 @@ A API requer as migrações `070_class_invites.sql` e `071_student_accounts_clas
 ## Cadastro de professor e coordenador no aplicativo
 
 Na entrada, use **Criar conta de professor/coordenador**. Escolha o perfil, informe nome, e-mail, CPF, senha e a primeira escola. Professores informam disciplinas e séries; coordenadores selecionam as etapas de ensino. O servidor cria conta, perfil e escola na mesma transação. Confirme o e-mail pelo link recebido e entre no aplicativo. Escolher Coordenador define o perfil profissional; não concede permissões sobre outras escolas nem administração geral.
+
+## Correção de cartões objetivos pelo celular
+
+1. No portal, crie a avaliação e suas versões, matricule os alunos na turma e agende a aplicação em **Turmas e alunos**. Gere e imprima os cartões individuais com QR Code.
+2. Entre no app como professor/coordenador, selecione a escola e toque em **Corrigir cartões de respostas**.
+3. Escolha uma aplicação já criada. Fotografe o cartão inteiro, com QR e alternativas visíveis, e confirme a foto. A lanterna pode ajudar em locais pouco iluminados.
+4. A foto fica salva no aparelho. Com internet, o app envia, acompanha a leitura e mostra a nota; fotos pendentes são retomadas quando a conexão volta.
+5. Leituras incompletas, respostas em branco ou marcações duvidosas exigem revisão e confirmação do professor. O resultado definitivo vem do servidor. Depois, use **Capturar próxima folha** para continuar a mesma aplicação.
+
+O envio guarda a aplicação escolhida; o servidor bloqueia QR de outra aplicação antes de gerar nota. A revisão também não pode trocar esse vínculo. Dados de versões anteriores do aplicativo permanecem no aparelho; novas capturas exigem aplicação válida e a atualização da API/worker com `072_mobile_scan_application.sql`.

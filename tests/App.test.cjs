@@ -1,15 +1,17 @@
 const test=require('node:test');const assert=require('node:assert/strict');const path=require('node:path');const {randomUUID}=require('node:crypto');const React=require('react');const renderer=require('react-test-renderer');const load=require('./load-typescript.cjs');const open=require('./sqlite-adapter.cjs');
 const {createOfflineStore}=load(path.join(__dirname,'../offline-store.ts'));global.IS_REACT_ACT_ENVIRONMENT=true;
 const account={owner:'teacher-owner',apiUrl:'https://ufaprova-api.onrender.com',userId:'u',institutionId:'i',email:'teacher@example.test',displayName:'Professor'};
-const school={id:'s',name:'Escola'},assessment={id:'a',title:'Prova'},schoolClass={id:'c',name:'Turma'};
+const school={id:'s',name:'Escola'},assessment={id:'10000000-0000-4000-8000-000000000001',title:'Prova'},schoolClass={id:'20000000-0000-4000-8000-000000000001',name:'Turma'};
 function text(node){return typeof node==='string'?node:node.children.map(text).join('');}function button(component,label){return component.root.findAllByType('Pressable').find(node=>text(node).includes(label));}
 async function setup(t, options = {}){
   const db=open(),store=createOfflineStore(db,randomUUID);await store.initialize();t.after(()=>db.close());
+  const application={id:'30000000-0000-4000-8000-000000000001',assessmentId:assessment.id,classId:schoolClass.id,title:assessment.title,className:schoolClass.name,status:'scheduled',students:1,completed:1};
+  await store.putCache(account.owner,'applications',[application]);
   await store.putCache(account.owner,'schools',[school]);await store.putCache(account.owner,'assessments',[assessment]);await store.putCache(account.owner,'classes',[schoolClass]);
   let network;let token=options.login ? null : JSON.stringify({...account,sessionToken:'token'});let uploads=0;
   let openedUrl;let googleReady=false;
-  const client={capabilities:async()=>{},upload:async(data,id)=>{uploads++;return {id,status:'completed'}},read:async id=>({id,status:'completed',submissionId:null,revision:null,score:null,maxScore:null,requiresManualReview:false,imageAvailable:true,candidates:[],detectedAnswers:[]}),catalog:async path=>path==='/api/educator-profile'?{schools:[school]}:path==='/api/classes'?[schoolClass]:[assessment]};
-  const Capture=props=>React.createElement('Pressable',{onPress:()=>props.onConfirm({photo:{uri:'file:///photo.jpg',width:1000,height:2000},schoolId:props.school.id,assessmentId:props.assessment.id,classId:props.schoolClass.id,schoolName:props.school.name,assessmentTitle:props.assessment.title,className:props.schoolClass.name})},React.createElement('Text',null,'Confirmar foto de teste'));
+  const client={capabilities:async()=>{},upload:async(data,id)=>{uploads++;return {id,status:'completed'}},read:async id=>({id,status:'completed',submissionId:null,revision:null,score:null,maxScore:null,requiresManualReview:false,imageAvailable:true,candidates:[],detectedAnswers:[]}),catalog:async path=>path==='/api/educator-profile'?{schools:[school]}:path==='/api/classes'?[schoolClass]:path==='/api/assessment-applications'?[application]:[assessment]};
+  const Capture=props=>React.createElement('Pressable',{onPress:()=>props.onConfirm({applicationId:props.applicationId,photo:{uri:'file:///photo.jpg',width:1000,height:2000},schoolId:props.school.id,assessmentId:props.assessment.id,classId:props.schoolClass.id,schoolName:props.school.name,assessmentTitle:props.assessment.title,className:props.schoolClass.name})},React.createElement('Text',null,'Confirmar foto de teste'));
   const Record=props=>React.createElement('Text',null,`Registro ${props.record.sheet.assessmentTitle}: ${props.record.remoteId?'enviado':'salvo localmente'}`);
   const {default:App}=load(path.join(__dirname,'../App.tsx'),{
     './StudentScreen':()=>React.createElement('Text',null,'Painel do aluno'),
@@ -28,12 +30,12 @@ async function setup(t, options = {}){
 }
 test('startup restores cached account and lists, and an offline capture survives navigation',async t=>{
   const h=await setup(t);assert(text(h.component.root).includes('Sem conexão'));assert(text(h.component.root).includes('Escola'));
-  await h.press('Continuar para avaliações');await h.press('Prova');await h.press('Turma');await h.press('Continuar para captura');await h.press('Confirmar foto de teste');
-  const records=await h.store.list(account.owner);assert.equal(records.length,1);assert.equal(records[0].sheet.assessmentId,'a');assert.equal(h.uploads,0);assert(text(h.component.root).includes('salvo localmente'));
+  await h.press('Corrigir cartões de respostas');await h.press('Prova');await h.press('Turma');await h.press('Continuar para captura');await h.press('Confirmar foto de teste');
+  const records=await h.store.list(account.owner);assert.equal(records.length,1);assert.equal(records[0].sheet.assessmentId,assessment.id);assert.equal(records[0].sheet.applicationId,'30000000-0000-4000-8000-000000000001');assert.equal(h.uploads,0);assert(text(h.component.root).includes('salvo localmente'));
   await h.press('Digitalizações');assert(text(h.component.root).includes('Pendente'));
 });
 test('connectivity restoration consumes the saved queue while preserving account context',async t=>{
-  const h=await setup(t);await h.press('Continuar para avaliações');await h.press('Prova');await h.press('Turma');await h.press('Continuar para captura');await h.press('Confirmar foto de teste');
+  const h=await setup(t);await h.press('Corrigir cartões de respostas');await h.press('Prova');await h.press('Turma');await h.press('Continuar para captura');await h.press('Confirmar foto de teste');
   await h.connect();assert.equal(h.uploads,1);const record=(await h.store.list(account.owner))[0];assert.equal(record.remoteId,record.id);assert.equal((await h.store.operations(account.owner)).length,0);
 });
 test('password starts hidden and can be revealed without changing its value',async t=>{

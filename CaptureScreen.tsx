@@ -5,6 +5,7 @@ import type { CameraCapturedPicture } from 'expo-camera';
 
 export type CapturedSheet = {
   photo: CameraCapturedPicture;
+  applicationId?: string;
   schoolId: string;
   assessmentId: string;
   classId: string;
@@ -14,6 +15,7 @@ export type CapturedSheet = {
 };
 
 type Props = {
+  applicationId?: string;
   school: { id: string; name: string };
   assessment: { id: string; title: string };
   schoolClass: { id: string; name: string };
@@ -21,7 +23,7 @@ type Props = {
   onBack: () => void;
 };
 
-export default function CaptureScreen({ school, assessment, schoolClass, onConfirm, onBack }: Props) {
+export default function CaptureScreen({ applicationId, school, assessment, schoolClass, onConfirm, onBack }: Props) {
   const camera = useRef<CameraView>(null);
   const busy = useRef(false);
   const mounted = useRef(true);
@@ -32,6 +34,7 @@ export default function CaptureScreen({ school, assessment, schoolClass, onConfi
   const [saving, setSaving] = useState(false);
   const [photo, setPhoto] = useState<CameraCapturedPicture | null>(null);
   const [error, setError] = useState('');
+  const [torch,setTorch]=useState(false);
   const [cameraFailed, setCameraFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
@@ -77,7 +80,7 @@ export default function CaptureScreen({ school, assessment, schoolClass, onConfi
   async function confirmPhoto() {
     if (!photo || busy.current) return;
     busy.current = true; setSaving(true); setError('');
-    try { await onConfirm({ photo, schoolId: school.id, assessmentId: assessment.id, classId: schoolClass.id, schoolName: school.name, assessmentTitle: assessment.title, className: schoolClass.name }); }
+    try { await onConfirm({ photo, applicationId, schoolId: school.id, assessmentId: assessment.id, classId: schoolClass.id, schoolName: school.name, assessmentTitle: assessment.title, className: schoolClass.name }); }
     catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : 'Não foi possível salvar a foto no aparelho.'); }
     finally { busy.current = false; if (mounted.current) setSaving(false); }
   }
@@ -114,15 +117,16 @@ export default function CaptureScreen({ school, assessment, schoolClass, onConfi
         </>
       ) : (
         <>
-          <Text style={styles.text}>Coloque a folha em uma superfície plana e bem iluminada. Enquadre toda a página, sem sombras.</Text>
+          <Text style={styles.text}>Coloque a folha em uma superfície plana e bem iluminada. Enquadre o cartão inteiro, incluindo o QR Code e todas as alternativas. Evite sombras e mantenha o celular paralelo ao papel.</Text>
           {active && !cameraFailed ? (
             <View style={styles.preview}>
-              <CameraView key={attempt} ref={camera} style={StyleSheet.absoluteFill} facing="back" mode="picture" autofocus="on"
+              <CameraView key={attempt} ref={camera} style={StyleSheet.absoluteFill} facing="back" mode="picture" autofocus="on" enableTorch={torch}
                 onCameraReady={() => setReady(true)}
                 onMountError={() => { setReady(false); setCameraFailed(true); setError('Não foi possível abrir a câmera. Tente novamente.'); }} />
               <View pointerEvents="none" style={styles.guide} />
             </View>
           ) : <Text style={styles.text}>{cameraFailed ? 'Câmera indisponível.' : 'Volte ao aplicativo para ativar a câmera.'}</Text>}
+          {!cameraFailed && <Pressable accessibilityRole="switch" accessibilityState={{checked:torch}} style={styles.secondary} onPress={()=>setTorch(value=>!value)}><Text style={styles.buttonText}>{torch?'Desligar lanterna':'Ligar lanterna'}</Text></Pressable>}
           {cameraFailed ? (
             <Pressable disabled={saving} style={[styles.secondary, saving && styles.disabled]} onPress={retake}><Text style={styles.buttonText}>Tentar novamente</Text></Pressable>
           ) : (

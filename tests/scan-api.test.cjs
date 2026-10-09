@@ -119,3 +119,12 @@ test('offline clients verify the current institution and include the expected sc
   await assert.rejects(client.capabilities(),error=>error.status===401);assert.equal(calls,0);
   mismatch=false;await client.capabilities();await client.upload(jpegDataUrl('YQ=='),ID);assert.equal(calls,1);
 });
+
+test('new card uploads preserve the application and refuse an older server that cannot enforce it',async()=>{
+ const applicationId='40000000-0000-4000-8000-000000000001';let scoped=false,uploads=0;
+ const client=createScanClient('https://api.example',async()=>'token',async(url,options)=>{
+  if(url.endsWith('/api/mobile-sync'))return Response.json({data:{version:1,idempotentUploads:true,manualReview:true,applicationScopedUploads:scoped}});
+  const body=JSON.parse(options.body);assert.equal(body.expectedApplicationId,applicationId);assert.equal(body.clientScanId,ID);uploads++;return Response.json({data:{id:ID,status:'queued'}});
+ });
+ await assert.rejects(client.capabilities(true),/aplicação selecionada/);assert.equal(uploads,0);scoped=true;await client.capabilities(true);await client.upload(jpegDataUrl('YQ=='),ID,applicationId);assert.equal(uploads,1);
+});

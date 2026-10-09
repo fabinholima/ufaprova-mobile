@@ -7,7 +7,9 @@ export function createSynchronizer(store: OfflineStore, client: ScanClient, owne
   let running: Promise<SyncReport> | null = null;
   async function execute(force: boolean): Promise<SyncReport> {
     const report: SyncReport = { sent: 0, blocked: 0, pending: 0, authExpired: false, error: null };
-    try { await client.capabilities(); }
+    try { const pending=await store.operations(owner),saved=await store.list(owner);
+      const scoped=pending.some(op=>op.kind==='upload' && op.state==='pending' && saved.find(r=>r.id===op.recordId)?.sheet.applicationId);
+      await client.capabilities(scoped); }
     catch (error) {
       report.error = error instanceof ScanApiError && error.status === 404 ? 'O servidor ainda não recebeu a atualização de sincronização móvel. Seus dados continuam salvos neste aparelho.' : error instanceof Error ? error.message : 'Não foi possível verificar a sincronização.';
       report.authExpired = error instanceof ScanApiError && error.status === 401;
@@ -23,7 +25,7 @@ export function createSynchronizer(store: OfflineStore, client: ScanClient, owne
         const record = await store.get(owner, operation.recordId);
         if (!record) throw new ScanApiError('Digitalização local não encontrada.', false, 422);
         if (operation.kind === 'upload') {
-          const created = await client.upload(record.imageDataUrl, record.id);
+          const created = await client.upload(record.imageDataUrl, record.id, record.sheet.applicationId);
           await store.acknowledge(owner, operation.id, record.id, { remoteId: created.id });
         } else if (operation.kind === 'confirm') {
           if (!record.remoteId) throw new ScanApiError('A folha ainda não foi enviada.', false, 422);

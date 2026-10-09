@@ -14,6 +14,8 @@ import type { LocalRecord, OfflineStore, Operation } from './offline-store';
 import { createSynchronizer, refreshRecord } from './offline-sync';
 import { prepareImage } from './prepare-image';
 import { ScanApiError } from './scan-api';
+import {parseApplications} from './application-contract';
+import type {CorrectionApplication} from './application-contract';
 import { ui } from './ui-styles';
 import { startGoogleLogin, checkGoogleLogin } from './google-login';
 import type { GoogleAttempt } from './google-login';
@@ -49,6 +51,8 @@ export default function App() {
   const [message, setMessage] = useState('');
   const [schools, setSchools] = useState<School[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [applications,setApplications]=useState<CorrectionApplication[]>([]);
+  const [selectedApplication,setSelectedApplication]=useState<CorrectionApplication|null>(null);
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [school, setSchool] = useState<School | null>(null);
   const [assessment, setAssessment] = useState<Assessment | null>(null);
@@ -68,11 +72,12 @@ export default function App() {
   async function activate(saved: Account, storage: OfflineStore) {
     ownerRef.current = saved.owner;
     setAccount(saved); setAuthExpired(false); setEmail(saved.email);
-    const [cachedSchools, cachedAssessments, cachedClasses, selectedSchool, savedRecords, pending] = await Promise.all([
-      storage.cache<School[]>(saved.owner, 'schools'), storage.cache<Assessment[]>(saved.owner, 'assessments'), storage.cache<SchoolClass[]>(saved.owner, 'classes'), storage.cache<string>(saved.owner, 'school'), storage.list(saved.owner), storage.operations(saved.owner),
+    const [cachedSchools, cachedAssessments, cachedClasses, selectedSchool, savedRecords, pending, cachedApplications] = await Promise.all([
+      storage.cache<School[]>(saved.owner, 'schools'), storage.cache<Assessment[]>(saved.owner, 'assessments'), storage.cache<SchoolClass[]>(saved.owner, 'classes'), storage.cache<string>(saved.owner, 'school'), storage.list(saved.owner), storage.operations(saved.owner), storage.cache<CorrectionApplication[]>(saved.owner,'applications'),
     ]);
     if (ownerRef.current !== saved.owner) return;
     setSchools(cachedSchools || []); setSchool(cachedSchools?.find(item => item.id === selectedSchool) || cachedSchools?.[0] || null);
+    setApplications(cachedApplications || []);setSelectedApplication(null);
     setAssessments(cachedAssessments || []); setClasses(cachedClasses || []); setAssessment(null); setSchoolClass(null);
     setRecords(savedRecords); setOperations(pending); setRecordId(null); setScreen('home');
   }
@@ -125,10 +130,11 @@ export default function App() {
       await storage.putCache(current.owner, 'schools', profile.schools);
       if (ownerRef.current === current.owner) { setSchools(profile.schools); setSchool(previous => profile.schools!.find(item => item.id === previous?.id) || profile.schools![0] || null); }
       if (!onlySchools) {
-        const [list, classList] = await Promise.all([api.catalog('/api/assessments'), api.catalog('/api/classes')]);
+        const [list, classList, applicationList] = await Promise.all([api.catalog('/api/assessments'), api.catalog('/api/classes'),api.catalog('/api/assessment-applications')]);
         if (!Array.isArray(list) || !Array.isArray(classList)) throw new Error('Listas de avaliações ou turmas inválidas.');
+        const appList=parseApplications(applicationList);await storage.putCache(current.owner,'applications',appList);
         await storage.putCache(current.owner, 'assessments', list); await storage.putCache(current.owner, 'classes', classList);
-        if (ownerRef.current === current.owner) { setAssessments(list); setClasses(classList); }
+        if (ownerRef.current === current.owner) { setAssessments(list); setClasses(classList);setApplications(appList); }
       }
     } catch (err) {
       if (ownerRef.current === current.owner) {
@@ -202,7 +208,7 @@ export default function App() {
   async function signOut() {
     ownerRef.current = null;
     setAccount(null); setSyncing(false); setScreen('login'); setPassword(''); setError(''); setMessage('');
-    setRecords([]); setOperations([]); setSchools([]); setSchool(null); setAssessments([]); setClasses([]); setAssessment(null); setSchoolClass(null);
+    setApplications([]);setSelectedApplication(null);setRecords([]); setOperations([]); setSchools([]); setSchool(null); setAssessments([]); setClasses([]); setAssessment(null); setSchoolClass(null);
     try { await SecureStore.deleteItemAsync(ACCOUNT_KEY); await SecureStore.deleteItemAsync('ufaprova.session'); }
     catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível encerrar a sessão local.'); }
   }
@@ -210,7 +216,7 @@ export default function App() {
     if (!school || !account || !store) return;
     await store.putCache(account.owner, 'school', school.id);
     if (ownerRef.current !== account.owner) return;
-    setScreen('assessments'); setAssessment(null); setSchoolClass(null);
+    setScreen('assessments');setSelectedApplication(null); setAssessment(null); setSchoolClass(null);
     if (connected && !loading) { setLoading(true); try { await loadCatalog(account, store); } finally { setLoading(false); } }
   }
   async function saveCapture(sheet: CapturedSheet) {
@@ -220,6 +226,7 @@ export default function App() {
     try {
       const image = await prepareImage(sheet.photo);
       if (ownerRef.current !== account.owner) throw new Error('A conta mudou antes de salvar a captura.');
+      if(!sheet.applicationId)throw Error('Selecione uma aplicação da prova antes de fotografar.');
       const id = await store.create(account.owner, sheet, image);
       await reload(); if (ownerRef.current === account.owner) { setRecordId(id); setScreen('record'); }
     } finally { savingCapture.current = false; }
@@ -237,7 +244,9 @@ export default function App() {
   function nextCapture(record: LocalRecord) {
     setSchool({ id: record.sheet.schoolId, name: record.sheet.schoolName });
     setAssessment({ id: record.sheet.assessmentId, title: record.sheet.assessmentTitle });
-    setSchoolClass({ id: record.sheet.classId, name: record.sheet.className }); setScreen('scan');
+    setSchoolClass({ id: record.sheet.classId, name: record.sheet.className });
+    const application=applications.find(a=>a.id===record.sheet.applicationId);setSelectedApplication(application || null);
+    if(!application){setScreen('assessments');setMessage('Selecione a aplicação antes de capturar o próximo cartão.');}else setScreen('scan');
   }
   if(educatorRegistration)return <EducatorRegistrationScreen apiUrl={API_URL} onBack={()=>setEducatorRegistration(false)} onCreated={(value,role)=>{setEducatorRegistration(false);setEmail(value);setPassword('');setShowPassword(false);setError('');setMessage(`Conta de ${role==='coordinator'?'coordenador':'professor'} criada. Confirme o link enviado ao seu e-mail e depois entre aqui.`);}} />;
   if(studentAccess)return <StudentScreen apiUrl={API_URL} onBack={()=>setStudentAccess(false)} />;
@@ -273,20 +282,18 @@ export default function App() {
         <Text style={ui.title}>Selecione a escola</Text>
         {!schools.length && <Text style={ui.text}>Nenhuma escola disponível neste aparelho. Conecte-se para carregar seu cadastro.</Text>}
         {schools.map(item => <Pressable key={item.id} style={[ui.card, school?.id === item.id && ui.selected]} onPress={() => setSchool(item)}><Text style={ui.cardTitle}>{item.name}</Text><Text style={ui.small}>{[item.city, item.state].filter(Boolean).join(' • ')}</Text></Pressable>)}
-        <Pressable disabled={!school || loading} style={[ui.primary, (!school || loading) && ui.disabled]} onPress={() => { void continueSchool().catch(err => setError(err.message)); }}><Text style={ui.primaryText}>Continuar para avaliações</Text></Pressable>
+        <Pressable disabled={!school || loading} style={[ui.primary, (!school || loading) && ui.disabled]} onPress={() => { void continueSchool().catch(err => setError(err.message)); }}><Text style={ui.primaryText}>Corrigir cartões de respostas</Text></Pressable>
         <Pressable disabled={!connected || loading} style={[ui.secondary, (!connected || loading) && ui.disabled]} onPress={() => { if (account && store) { setLoading(true); void loadCatalog(account, store).finally(() => setLoading(false)); } }}><Text style={ui.buttonText}>Atualizar listas</Text></Pressable>
       </> : screen === 'assessments' ? <>
         <Text style={ui.text}>{school?.name}</Text><Text style={ui.small}>Avaliações e turmas da instituição da sua conta.</Text>
         {loading && <ActivityIndicator />}
-        <Text style={ui.title}>Selecione a avaliação</Text>
-        {!assessments.length && <Text style={ui.text}>Nenhuma avaliação disponível. Atualize as listas com internet.</Text>}
-        {assessments.map(item => <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{ selected: assessment?.id === item.id }} style={[ui.card, assessment?.id === item.id && ui.selected]} onPress={() => setAssessment(item)}><Text style={ui.cardTitle}>{item.title}</Text><Text style={ui.small}>{[item.subject, item.grade].filter(Boolean).join(' • ')}</Text></Pressable>)}
-        <Text style={ui.title}>Selecione a turma</Text>
-        {!classes.length && <Text style={ui.text}>Nenhuma turma disponível. Atualize as listas com internet.</Text>}
-        {classes.map(item => <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{ selected: schoolClass?.id === item.id }} style={[ui.card, schoolClass?.id === item.id && ui.selected]} onPress={() => setSchoolClass(item)}><Text style={ui.cardTitle}>{item.name}</Text><Text style={ui.small}>{[item.grade, item.schoolYear].filter(Boolean).join(' • ')}</Text></Pressable>)}
-        <Pressable disabled={!assessment || !schoolClass} style={[ui.primary, (!assessment || !schoolClass) && ui.disabled]} onPress={() => setScreen('scan')}><Text style={ui.primaryText}>Continuar para captura</Text></Pressable>
+        <Text style={ui.title}>Selecione a aplicação da prova</Text>
+        <Text style={ui.text}>Use o cartão de respostas com QR Code gerado no portal. Confira também a escola impressa no cartão.</Text>
+        {!applications.length && <><Text style={ui.text}>Nenhuma aplicação disponível. No portal, abra Turmas e alunos, agende a avaliação para a turma e gere os cartões individuais.</Text><Pressable style={ui.secondary} onPress={()=>void Linking.openURL(`${process.env.EXPO_PUBLIC_PORTAL_URL || 'https://ufaprova-frontend.onrender.com'}/portal`).catch(()=>setError('Não foi possível abrir o portal.'))}><Text style={ui.buttonText}>Abrir portal para preparar os cartões</Text></Pressable></>}
+        {applications.map(item=><Pressable key={item.id} accessibilityRole="radio" accessibilityState={{selected:selectedApplication?.id===item.id}} style={[ui.card,selectedApplication?.id===item.id&&ui.selected]} onPress={()=>{setSelectedApplication(item);setAssessment({id:item.assessmentId,title:item.title});setSchoolClass({id:item.classId,name:item.className});}}><Text style={ui.cardTitle}>{item.title}</Text><Text style={ui.text}>{item.className} · {item.students} alunos</Text></Pressable>)}
+        <Pressable disabled={!selectedApplication||loading} style={[ui.primary,(!selectedApplication||loading)&&ui.disabled]} onPress={()=>setScreen('scan')}><Text style={ui.primaryText}>Continuar para captura</Text></Pressable>
         <Pressable style={ui.secondary} onPress={() => setScreen('home')}><Text style={ui.buttonText}>Trocar escola</Text></Pressable>
-      </> : screen === 'scan' && school && assessment && schoolClass ? <CaptureScreen school={school} assessment={assessment} schoolClass={schoolClass} onConfirm={saveCapture} onBack={() => setScreen('assessments')} /> : screen === 'record' && selectedRecord && store ? <RecordScreen key={selectedRecord.id} record={selectedRecord} operations={operations} store={store} connected={connected} onSaved={reload} onRefresh={refreshSelected} onRetry={retrySelected} onNext={() => nextCapture(selectedRecord)} onBack={() => setScreen('records')} /> : <>
+      </> : screen === 'scan' && school && assessment && schoolClass ? <CaptureScreen applicationId={selectedApplication?.id} school={school} assessment={assessment} schoolClass={schoolClass} onConfirm={saveCapture} onBack={() => setScreen('assessments')} /> : screen === 'record' && selectedRecord && store ? <RecordScreen key={selectedRecord.id} record={selectedRecord} operations={operations} store={store} connected={connected} onSaved={reload} onRefresh={refreshSelected} onRetry={retrySelected} onNext={() => nextCapture(selectedRecord)} onBack={() => setScreen('records')} /> : <>
         <Text style={ui.title}>Digitalizações salvas</Text>
         {!records.length && <Text style={ui.text}>As folhas capturadas aparecerão aqui, mesmo sem conexão.</Text>}
         {records.map(record => <Pressable key={record.id} style={ui.card} onPress={() => { setRecordId(record.id); setScreen('record'); }}><Text style={ui.cardTitle}>{record.sheet.assessmentTitle} • {record.sheet.className}</Text><Text style={ui.small}>{localStatus(record, operations)}</Text><Text style={ui.small}>{record.sheet.schoolName}</Text></Pressable>)}
