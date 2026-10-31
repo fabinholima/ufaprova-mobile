@@ -21,7 +21,7 @@ npm test
 npx expo start
 ```
 
-Configure `EXPO_PUBLIC_API_URL` para usar outra API. O projeto usa Expo SDK 57. Use uma versão compatível do Expo Go ou uma compilação de desenvolvimento. Permissões alteradas em `app.json` exigem recompilar o aplicativo instalado.
+Configure `EXPO_PUBLIC_API_URL` para usar outra API. O projeto usa Expo SDK 58. Use uma versão compatível do Expo Go ou uma compilação de desenvolvimento. Permissões alteradas em `app.json` exigem recompilar o aplicativo instalado.
 
 ## Entrada com Google e senha
 
@@ -39,7 +39,7 @@ As telas e módulos nativos são simulados; o contrato HTTP é exercitado com se
 
 ## Uso offline
 
-Entre com internet pelo menos uma vez e carregue escolas, avaliações e turmas. O app mantém a última conta no SecureStore e as listas no [Expo SQLite](https://docs.expo.dev/versions/v57.0.0/sdk/sqlite/), separadas por URL da API, professor e instituição.
+Entre com internet pelo menos uma vez e carregue escolas, avaliações e turmas. O app mantém a última conta no SecureStore e as listas no [Expo SQLite](https://docs.expo.dev/versions/v58.0.0/sdk/sqlite/), separadas por URL da API, professor e instituição.
 
 Ao tocar em **Usar esta foto**, a imagem é preparada e salva no SQLite com escola, avaliação e turma. O JPEG conserva a página inteira, limita o lado maior a 2600 pixels e usa qualidade de 90%. Ele não depende do arquivo temporário da câmera. O limite de envio continua sendo 8 milhões de caracteres no data URL, incluindo o prefixo.
 
@@ -53,7 +53,7 @@ Notas e comentários são salvos como rascunho a cada alteração. Depois de con
 
 ## Sincronização e conflitos
 
-A sincronização usa [NetInfo](https://docs.expo.dev/versions/v57.0.0/sdk/netinfo/) e o estado do aplicativo. Com conexão e app em primeiro plano, verifica os trabalhos pendentes a cada 10 segundos. Também pode ser acionada por **Sincronizar agora**. Falhas transitórias recebem novas tentativas com atraso crescente, de 5 segundos a 5 minutos. Consultas e operações da fila nunca usam o token de outra conta; identidade e token são lidos juntos do SecureStore. A conta é vinculada à instituição confirmada por `/api/auth/me`, e o servidor verifica a instituição esperada em cada envio.
+A sincronização usa [NetInfo](https://docs.expo.dev/versions/v58.0.0/sdk/netinfo/) e o estado do aplicativo. Com conexão e app em primeiro plano, verifica os trabalhos pendentes a cada 10 segundos. Também pode ser acionada por **Sincronizar agora**. Falhas transitórias recebem novas tentativas com atraso crescente, de 5 segundos a 5 minutos. Consultas e operações da fila nunca usam o token de outra conta; identidade e token são lidos juntos do SecureStore. A conta é vinculada à instituição confirmada por `/api/auth/me`, e o servidor verifica a instituição esperada em cada envio.
 
 Cada foto tem um UUID estável enviado como `clientScanId`. Correções usam um `clientMutationId` estável. A operação mantém também o ID original da correção: uma folha reassociada no servidor exige nova conferência, sem transferir notas para outro aluno automaticamente. O backend devolve o resultado original quando uma operação é repetida após perda de resposta ou reinício, sem criar outra digitalização nem reaplicar a nota.
 
@@ -101,7 +101,7 @@ O servidor valida a instituição, os limites das notas e o tipo de questão, ma
 - Backend e worker OMR publicados no Render a partir de `8b67af76a8e25d7f2849d380496ec3e1c71e8234`.
 - `https://ufaprova-api.onrender.com/health` confirmou HTTP 200, a revisão publicada e `mobileSyncSchemaVersion: 1`; a migração 066 foi aplicada ao banco de produção.
 - CI do backend passou. Os testes HTTP em produção confirmaram que o login móvel sem `Origin` chega à validação, uma origem de navegador não autorizada continua bloqueada e a sincronização continua exigindo autenticação. Não foram criados alunos nem atribuídas notas de teste em produção.
-- A validação óptica, da câmera e do uso offline em aparelho físico permanece pendente. Para Android, use [Expo Go compatível com SDK 57](https://expo.dev/go?sdkVersion=57&platform=android&device=true) e inicie `npx expo start --lan` com computador e celular na mesma rede. O QR da sessão é temporário e não substitui uma versão instalável de produção.
+- A validação óptica, da câmera e do uso offline em aparelho físico permanece pendente. Para Android, use [Expo Go compatível com SDK 58](https://expo.dev/go?sdkVersion=58&platform=android&device=true) e inicie `npx expo start --lan` com computador e celular na mesma rede. O QR da sessão é temporário e não substitui uma versão instalável de produção.
 
 ## Contas de aluno e convites de turma
 
