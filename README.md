@@ -109,6 +109,8 @@ O acesso **Sou aluno** oferece cadastro com e-mail e senha, entrada pelo Google,
 
 No portal, o professor abre **Turmas e alunos → Convidar alunos**, seleciona a escola cadastrada e compartilha código/link/QR. A solicitação fica pendente até a confirmação explícita do cadastro pelo responsável. Nenhum cadastro existente é associado automaticamente por nome.
 
+Quem recebeu do professor o código pessoal do aluno (`UFA-XXXXXXXX`) usa **Tenho o código do aluno**: o app mostra nome, escola e turmas do cadastro e, depois de **Sou eu, vincular minha conta**, a conta passa a valer na hora para as turmas desse cadastro, sem aprovação. O código vale para uma única conta; o professor pode desvincular no portal, o que gera um novo código. Rotas: `POST /api/student/access-code/inspect` e `POST /api/student/access-code/claim` (`{ code }`). Um servidor sem essas rotas responde 403 e o app orienta a usar o código da turma.
+
 O aluno vê apenas seus próprios vínculos e atividades das turmas aprovadas. Notas que ainda exigem revisão do professor não são exibidas. A sessão de aluno fica separada do armazenamento offline de correção.
 
 As notas aparecem em **Notas por período**, agrupadas pela data da aplicação em períodos trimestrais do ano civil (1º período: jan–mar, 2º: abr–jun, 3º: jul–set, 4º: out–dez). Não há calendário escolar cadastrado; aplicações sem data ficam em **Sem data de aplicação**. Cada período mostra a média do percentual de acerto. **Minha evolução** mostra as últimas oito avaliações com nota e compara a média dos dois períodos mais recentes. Notas em revisão manual não entram nas médias. A lista vem de `GET /api/student/activities` e inclui somente resultados de cartões lidos pela câmera ou pelo scanner.

@@ -23,7 +23,8 @@ export function createStudentClient(apiUrl: string, token?: string) {
       signal: AbortSignal.timeout(15000),
     });
     const body = await response.json();
-    if (!response.ok) throw Error(body.error || "Não foi possível continuar.");
+    if (!response.ok)
+      throw Object.assign(Error(body.error || "Não foi possível continuar."), { status: response.status });
     return body.data as T;
   };
 }
@@ -73,4 +74,19 @@ export function selfieDataUrl(base64: string | undefined) {
   const bytes = Math.floor((value.length * 3) / 4) - (value.match(/=+$/)?.[0].length || 0);
   if (bytes > SELFIE_MAX_BYTES) throw Error("A foto ficou maior que 400 KB. Tente novamente.");
   return `data:image/jpeg;base64,${value}`;
+}
+export type StudentCodeMatch = {
+  studentName: string;
+  schoolName: string;
+  classes: { className: string }[];
+};
+export type StudentCodeClaim = {
+  studentId: string;
+  classes: { className: string; schoolName: string }[];
+};
+export function normalizeStudentCode(value: string) {
+  const hex = value.trim().toUpperCase().replace(/^UFA-?/, "");
+  if (!/^[0-9A-F]{8}$/.test(hex))
+    throw Error("Digite o código do aluno no formato UFA-XXXXXXXX.");
+  return `UFA-${hex}`;
 }

@@ -16,6 +16,7 @@ import * as SecureStore from "expo-secure-store";
 import StudentInviteScanner from "./StudentInviteScanner";
 import StudentPhotoScreen from "./StudentPhotoScreen";
 import StudentGrades from "./StudentGrades";
+import StudentCodeJoin from "./StudentCodeJoin";
 import { ui } from "./ui-styles";
 import { createStudentClient, verifyStudentSession, STUDENT_SESSION_KEY } from "./student-api";
 import type {
@@ -299,9 +300,23 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
         ) : (
           <>
             <Text style={ui.text}>Olá, {identity.user.displayName}.</Text>
-            <Text style={ui.title}>Entrar em uma turma</Text>
+            <StudentCodeJoin
+              apiUrl={apiUrl}
+              token={token}
+              busy={busy}
+              run={run}
+              onLinked={async (claim) => {
+                await refresh();
+                setMessage(
+                  claim.classes.length
+                    ? `Conta vinculada. Turmas: ${claim.classes.map((c) => c.className).join(", ")}.`
+                    : "Conta vinculada ao seu cadastro.",
+                );
+              }}
+            />
+            <Text style={ui.title}>Entrar com o código da turma</Text>
             <Text style={ui.small}>
-              Digite o código fornecido pelo professor. O vínculo depende da aprovação dele.
+              Digite o código da turma fornecido pelo professor. O vínculo depende da aprovação dele.
             </Text>
             <TextInput
               style={ui.input}
