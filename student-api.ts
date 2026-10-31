@@ -59,3 +59,17 @@ export function inviteCodeFromQr(value: string) {
     throw Error("Este QR Code não é um convite de turma do UFA Prova.");
   return code;
 }
+export type StudentProfile = {
+  id: string;
+  name: string;
+  registration: string;
+  selfieDataUrl: string | null;
+};
+export const SELFIE_MAX_BYTES = 400000;
+export function selfieDataUrl(base64: string | undefined) {
+  const value = (base64 || "").replace(/\s/g, "");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) throw Error("Não foi possível preparar a foto.");
+  const bytes = Math.floor((value.length * 3) / 4) - (value.match(/=+$/)?.[0].length || 0);
+  if (bytes > SELFIE_MAX_BYTES) throw Error("A foto ficou maior que 400 KB. Tente novamente.");
+  return `data:image/jpeg;base64,${value}`;
+}

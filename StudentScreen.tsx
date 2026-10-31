@@ -2,24 +2,35 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
+  Image,
   Linking,
   Pressable,
   SafeAreaView,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import StudentInviteScanner from "./StudentInviteScanner";
+import StudentPhotoScreen from "./StudentPhotoScreen";
 import { ui } from "./ui-styles";
 import { createStudentClient, verifyStudentSession, STUDENT_SESSION_KEY } from "./student-api";
-import type { StudentIdentity, StudentRequest, ClassInvite, StudentActivity } from "./student-api";
+import type {
+  StudentIdentity,
+  StudentRequest,
+  ClassInvite,
+  StudentActivity,
+  StudentProfile,
+} from "./student-api";
 import { startGoogleLogin, checkGoogleLogin } from "./google-login";
 import type { GoogleAttempt } from "./google-login";
 export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBack: () => void }) {
   const [scanning, setScanning] = useState(false),
-    [activities, setActivities] = useState<StudentActivity[]>([]);
+    [activities, setActivities] = useState<StudentActivity[]>([]),
+    [profiles, setProfiles] = useState<StudentProfile[] | null>([]),
+    [photoProfile, setPhotoProfile] = useState<StudentProfile | null>(null);
   const [identity, setIdentity] = useState<StudentIdentity | null>(null),
     [token, setToken] = useState(""),
     [mode, setMode] = useState<"login" | "register">("login"),
@@ -48,12 +59,15 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
   }
   async function refresh(value = token) {
     const client = createStudentClient(apiUrl, value);
-    const [list, own] = await Promise.all([
+    const [list, own, profile] = await Promise.all([
       client<StudentRequest[]>("/api/class-join-requests/me"),
       client<StudentActivity[]>("/api/student/activities"),
+      // An older API without photo support must not block grades and requests.
+      client<StudentProfile[]>("/api/student/profile").catch(() => null),
     ]);
     setRequests(list);
     setActivities(own);
+    setProfiles(profile);
   }
   async function accept(value: string) {
     const user = await verifyStudentSession(apiUrl, value);
@@ -118,6 +132,24 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
       <Text style={secondary ? ui.buttonText : ui.primaryText}>{label}</Text>
     </Pressable>
   );
+  if (photoProfile)
+    return (
+      <SafeAreaView style={ui.safe}>
+        <ScrollView contentContainerStyle={ui.container}>
+          <StudentPhotoScreen
+            apiUrl={apiUrl}
+            token={token}
+            profile={photoProfile}
+            onBack={() => setPhotoProfile(null)}
+            onSaved={async () => {
+              setPhotoProfile(null);
+              setMessage("Foto salva no seu cadastro.");
+              await refresh().catch(() => {});
+            }}
+          />
+        </ScrollView>
+      </SafeAreaView>
+    );
   if (scanning)
     return (
       <SafeAreaView style={ui.safe}>
@@ -323,6 +355,43 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
                 </Text>
               </View>
             ))}
+            <Text style={ui.title}>Meu cadastro</Text>
+            {profiles === null ? (
+              <Text style={ui.small}>Não foi possível carregar seu cadastro agora.</Text>
+            ) : !profiles.length ? (
+              <Text style={ui.small}>
+                A foto do cadastro fica disponível depois que o professor aprovar seu vínculo.
+              </Text>
+            ) : (
+              profiles.map((p) => (
+                <View key={p.id} style={ui.card}>
+                  {p.selfieDataUrl ? (
+                    <Image
+                      source={{ uri: p.selfieDataUrl }}
+                      style={styles.avatar}
+                      accessibilityLabel={`Foto de ${p.name}`}
+                    />
+                  ) : (
+                    <Text style={ui.small}>Cadastro sem foto</Text>
+                  )}
+                  <Text style={ui.cardTitle}>{p.name}</Text>
+                  {!!p.registration && <Text style={ui.small}>Matrícula: {p.registration}</Text>}
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={busy}
+                    style={[ui.secondary, busy && ui.disabled]}
+                    onPress={() => {
+                      setMessage("");
+                      setPhotoProfile(p);
+                    }}
+                  >
+                    <Text style={ui.buttonText}>
+                      {p.selfieDataUrl ? "Trocar foto" : "Adicionar foto"}
+                    </Text>
+                  </Pressable>
+                </View>
+              ))
+            )}
             <Text style={ui.title}>Minhas atividades e resultados</Text>
             {!activities.length && <Text style={ui.small}>Nenhuma atividade disponível.</Text>}
             {activities.map((a) => (
@@ -348,6 +417,7 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
                 setIdentity(null);
                 setToken("");
                 setRequests([]);
+                setProfiles([]);
                 setInvite(null);
                 onBack();
               },
@@ -364,3 +434,7 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  avatar: { width: 96, height: 96, borderRadius: 48, marginBottom: 12, backgroundColor: "#e2e8f0" },
+});
