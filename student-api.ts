@@ -41,6 +41,7 @@ export type StudentActivity = {
   score: string | null;
   maxScore: string | null;
   requiresManualReview: boolean;
+  scheduledAt?: string | null;
 };
 export function inviteCodeFromQr(value: string) {
   const url = new URL(value);

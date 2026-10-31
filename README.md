@@ -111,6 +111,8 @@ No portal, o professor abre **Turmas e alunos → Convidar alunos**, seleciona a
 
 O aluno vê apenas seus próprios vínculos e atividades das turmas aprovadas. Notas que ainda exigem revisão do professor não são exibidas. A sessão de aluno fica separada do armazenamento offline de correção.
 
+As notas aparecem em **Notas por período**, agrupadas pela data da aplicação em períodos trimestrais do ano civil (1º período: jan–mar, 2º: abr–jun, 3º: jul–set, 4º: out–dez). Não há calendário escolar cadastrado; aplicações sem data ficam em **Sem data de aplicação**. Cada período mostra a média do percentual de acerto. **Minha evolução** mostra as últimas oito avaliações com nota e compara a média dos dois períodos mais recentes. Notas em revisão manual não entram nas médias. A lista vem de `GET /api/student/activities` e inclui somente resultados de cartões lidos pela câmera ou pelo scanner.
+
 Depois da aprovação, a seção **Meu cadastro** mostra o cadastro vinculado e permite **Adicionar foto** ou **Trocar foto** com a câmera frontal. O app reduz a imagem para JPEG de até 400 KB e a envia para `POST /api/student/profile` (`{ studentId, selfieDataUrl }`). Antes da aprovação a foto não fica disponível. Se a API ainda não oferecer essa rota, notas e solicitações continuam visíveis.
 
 A API requer as migrações `070_class_invites.sql` e `071_student_accounts_class_links.sql`. As rotas e restrições estão documentadas no portal em `docs/class-invites-api.md`. Para portais com outro endereço, configure `EXPO_PUBLIC_PORTAL_URL`; o leitor aceita somente convites desse portal.

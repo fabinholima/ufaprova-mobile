@@ -15,6 +15,7 @@ import {
 import * as SecureStore from "expo-secure-store";
 import StudentInviteScanner from "./StudentInviteScanner";
 import StudentPhotoScreen from "./StudentPhotoScreen";
+import StudentGrades from "./StudentGrades";
 import { ui } from "./ui-styles";
 import { createStudentClient, verifyStudentSession, STUDENT_SESSION_KEY } from "./student-api";
 import type {
@@ -392,23 +393,7 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
                 </View>
               ))
             )}
-            <Text style={ui.title}>Minhas atividades e resultados</Text>
-            {!activities.length && <Text style={ui.small}>Nenhuma atividade disponível.</Text>}
-            {activities.map((a) => (
-              <View key={a.id} style={ui.card}>
-                <Text style={ui.cardTitle}>{a.title}</Text>
-                <Text style={ui.small}>
-                  {a.schoolName} · {a.className}
-                </Text>
-                <Text style={ui.text}>
-                  {a.requiresManualReview
-                    ? "Aguardando revisão do professor"
-                    : a.score !== null
-                      ? `Resultado: ${a.score} / ${a.maxScore}`
-                      : "Sem resultado disponível"}
-                </Text>
-              </View>
-            ))}
+            <StudentGrades activities={activities} />
             {button(
               "Sair",
               async () => {
