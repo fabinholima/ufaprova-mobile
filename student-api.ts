@@ -44,18 +44,25 @@ export type StudentActivity = {
   requiresManualReview: boolean;
   scheduledAt?: string | null;
 };
+// Parsed by hand: React Native's URL polyfill is regex-based and differs from the WHATWG URL in edge cases.
+const PORTAL_HOST = /^https:\/\/([a-z0-9.-]+)\/?$/;
 export function inviteCodeFromQr(value: string) {
-  const url = new URL(value);
-  const frontend = new URL(
-    process.env.EXPO_PUBLIC_PORTAL_URL || "https://ufaprova-frontend.onrender.com",
-  );
-  const code = url.searchParams.get("invite") || "";
+  // The portal is served on the official domain and on Render; EXPO_PUBLIC_PORTAL_URL may list others, comma-separated.
+  const hosts = (
+    process.env.EXPO_PUBLIC_PORTAL_URL ||
+    "https://ufaprova.com.br,https://www.ufaprova.com.br,https://ufaprova-frontend.onrender.com"
+  )
+    .split(",")
+    .map((portal: string) => PORTAL_HOST.exec(portal.trim().toLowerCase())?.[1]);
+  const match = /^https:\/\/([a-z0-9.-]+)\/portal\/?\?([^#]*)(?:#.*)?$/i.exec(value.trim());
+  const pair = (match?.[2] || "").split("&").find((item) => item.startsWith("invite="));
+  let code = "";
+  try {
+    code = decodeURIComponent((pair || "").slice("invite=".length)).trim().toUpperCase();
+  } catch {}
   if (
-    url.origin !== frontend.origin ||
-    url.pathname !== "/portal" ||
-    url.username ||
-    url.password ||
-    !url.protocol.startsWith("https") ||
+    !match ||
+    !hosts.includes(match[1].toLowerCase()) ||
     !/^([ABCDEFGHJKMNPQRSTUVWXYZ23456789]{4})-?([ABCDEFGHJKMNPQRSTUVWXYZ23456789]{4})$/.test(code)
   )
     throw Error("Este QR Code não é um convite de turma do UFA Prova.");

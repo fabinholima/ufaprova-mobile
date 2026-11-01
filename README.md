@@ -117,7 +117,7 @@ As notas aparecem em **Notas por período**, agrupadas pela data da aplicação 
 
 Depois da aprovação, a seção **Meu cadastro** mostra o cadastro vinculado e permite **Adicionar foto** ou **Trocar foto** com a câmera frontal. O app reduz a imagem para JPEG de até 400 KB e a envia para `POST /api/student/profile` (`{ studentId, selfieDataUrl }`). Antes da aprovação a foto não fica disponível. Se a API ainda não oferecer essa rota, notas e solicitações continuam visíveis.
 
-A API requer as migrações `070_class_invites.sql` e `071_student_accounts_class_links.sql`. As rotas e restrições estão documentadas no portal em `docs/class-invites-api.md`. Para portais com outro endereço, configure `EXPO_PUBLIC_PORTAL_URL`; o leitor aceita somente convites desse portal.
+A API requer as migrações `070_class_invites.sql` e `071_student_accounts_class_links.sql`. As rotas e restrições estão documentadas no portal em `docs/class-invites-api.md`. O leitor aceita convites de `https://ufaprova.com.br`, `https://www.ufaprova.com.br` e `https://ufaprova-frontend.onrender.com`. Para outros endereços, configure `EXPO_PUBLIC_PORTAL_URL` com a lista de origens separadas por vírgula; ela substitui a lista padrão.
 
 ## Cadastro de professor e coordenador no aplicativo
 
