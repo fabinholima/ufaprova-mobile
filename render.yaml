@@ -1,0 +1,51 @@
+# PWA do UFA Prova: site estático do Render (plano gratuito de sites estáticos).
+# Este arquivo não cria nada sozinho: o serviço só existe depois de criado no
+# painel do Render (New > Blueprint ou Static Site) por quem administra a conta.
+services:
+  - type: web
+    runtime: static
+    name: ufaprova-pwa
+    buildCommand: npm ci && npx expo export --platform web
+    staticPublishPath: dist
+    # Os dois subdomínios apontam para o mesmo site; o app escolhe a entrada
+    # pelo nome do host. Cada um precisa de um CNAME no DNS do domínio.
+    domains:
+      - professor.ufaprova.com.br
+      - aluno.ufaprova.com.br
+    envVars:
+      - key: EXPO_PUBLIC_API_URL
+        value: https://api.ufaprova.com.br
+      - key: EXPO_PUBLIC_TEACHER_URL
+        value: https://professor.ufaprova.com.br
+      - key: EXPO_PUBLIC_STUDENT_URL
+        value: https://aluno.ufaprova.com.br
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.ufaprova.com.br https://ufaprova-api.onrender.com; connect-src 'self' https://api.ufaprova.com.br https://ufaprova-api.onrender.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+      - path: /*
+        name: Permissions-Policy
+        value: "camera=(self), microphone=(), geolocation=()"
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=15552000
+      # Página e service worker sempre revalidados para receber versões novas.
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache
+      - path: /_expo/static/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable

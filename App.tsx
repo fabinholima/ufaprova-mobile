@@ -1,30 +1,35 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Linking, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
-import * as SecureStore from 'expo-secure-store';
+import * as Crypto from 'expo-crypto';
+import { sessionStore as SecureStore } from './platform-store';
+import { authHeaders, credentials, endSession, loginToken, persistSession } from './platform-http';
+import { API_URL, PORTAL_URL } from './api-config';
+import { hostProfile, switchProfile, warnBeforeLeaving } from './host-profile';
 import EducatorRegistrationScreen from './EducatorRegistrationScreen';
 import StudentScreen from './StudentScreen';
 import {STUDENT_SESSION_KEY} from './student-api';
 import CaptureScreen from './CaptureScreen';
 import type { CapturedSheet } from './CaptureScreen';
 import RecordScreen, { localStatus } from './RecordScreen';
-import { ACCOUNT_KEY, accountClient, accountFromLogin, getStore } from './offline-runtime';
+import ResultsScreen from './ResultsScreen';
+import { ACCOUNT_KEY, PERSISTENT_STORE, accountClient, accountFromLogin, getStore } from './offline-runtime';
 import type { Account } from './offline-runtime';
 import type { LocalRecord, OfflineStore, Operation } from './offline-store';
 import { createSynchronizer, refreshRecord } from './offline-sync';
 import { prepareImage } from './prepare-image';
 import { ScanApiError } from './scan-api';
-import {parseApplications} from './application-contract';
+import {answerKeyLine,answerKeyProblem,parseApplications} from './application-contract';
 import type {CorrectionApplication} from './application-contract';
 import { ui } from './ui-styles';
 import { startGoogleLogin, checkGoogleLogin } from './google-login';
+import { requestPasswordReset } from './password-reset';
 import type { GoogleAttempt } from './google-login';
 
-type Screen = 'login' | 'home' | 'assessments' | 'scan' | 'records' | 'record';
+type Screen = 'login' | 'home' | 'assessments' | 'scan' | 'records' | 'record' | 'results';
 type School = { id: string; name: string; city?: string; state?: string };
 type Assessment = { id: string; title: string; subject?: string; grade?: string };
 type SchoolClass = { id: string; name: string; grade?: string; schoolYear?: number };
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://ufaprova-api.onrender.com';
 
 export default function App() {
   const [educatorRegistration,setEducatorRegistration]=useState(false);
@@ -115,6 +120,8 @@ export default function App() {
     finally { if (ownerRef.current === owner) setSyncing(false); }
   }, [synchronizer, account, connected, reload]);
   const hasWork = operations.some(operation => operation.state === 'pending') || records.some(record => record.remoteId && (record.scan?.status !== 'completed' || !record.submission));
+  const unsent = !PERSISTENT_STORE && operations.length > 0;
+  useEffect(() => warnBeforeLeaving(unsent), [unsent]);
   useEffect(() => {
     if (!connected || !active || authExpired || !hasWork || !account) return;
     void sync();
@@ -143,8 +150,9 @@ export default function App() {
       }
     }
   }
-  async function acceptSession(token: string, storage: OfflineStore) {
-    const identityResponse = await fetch(`${API_URL}/api/auth/me`, { headers: { authorization: `Bearer ${token}`, 'x-client': 'mobile' }, signal: AbortSignal.timeout(15_000) });
+  async function acceptSession(received: string, storage: OfflineStore) {
+    const token = await persistSession(API_URL, received);
+    const identityResponse = await fetch(`${API_URL}/api/auth/me`, { credentials, headers: authHeaders(token), signal: AbortSignal.timeout(15_000) });
     const identityBody = await identityResponse.json();
     if (!identityResponse.ok) throw new Error(identityBody.error || 'Não foi possível confirmar a instituição da conta.');
     if(identityBody.data?.role === 'student'){await SecureStore.setItemAsync(STUDENT_SESSION_KEY,JSON.stringify({apiUrl:API_URL,token}));setStudentAccess(true);setPassword('');return;}
@@ -197,11 +205,12 @@ export default function App() {
     if (loading || !store) return;
     setLoading(true); setError(''); setMessage('');
     try {
-      const response = await fetch(`${API_URL}/api/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-client': 'mobile' }, body: JSON.stringify({ email: email.trim(), password }) });
+      const response = await fetch(`${API_URL}/api/auth/login`, { method: 'POST', credentials, headers: { 'content-type': 'application/json', ...authHeaders(null) }, body: JSON.stringify({ email: email.trim(), password }) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Não foi possível entrar.');
-      if (typeof body.data?.token !== 'string' || !body.data.token) throw new Error('A API não retornou uma sessão válida.');
-      await acceptSession(body.data.token, store);
+      const token = loginToken(body.data);
+      if (!token) throw new Error('A API não retornou uma sessão válida.');
+      await acceptSession(token, store);
     } catch (err) { setError(err instanceof Error ? err.message : 'Falha de conexão com a API.'); }
     finally { setLoading(false); }
   }
@@ -209,7 +218,7 @@ export default function App() {
     ownerRef.current = null;
     setAccount(null); setSyncing(false); setScreen('login'); setPassword(''); setError(''); setMessage('');
     setApplications([]);setSelectedApplication(null);setRecords([]); setOperations([]); setSchools([]); setSchool(null); setAssessments([]); setClasses([]); setAssessment(null); setSchoolClass(null);
-    try { await SecureStore.deleteItemAsync(ACCOUNT_KEY); await SecureStore.deleteItemAsync('ufaprova.session'); }
+    try { await SecureStore.deleteItemAsync(ACCOUNT_KEY); await SecureStore.deleteItemAsync('ufaprova.session'); await endSession(API_URL); }
     catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível encerrar a sessão local.'); }
   }
   async function continueSchool() {
@@ -249,15 +258,22 @@ export default function App() {
     if(!application){setScreen('assessments');setMessage('Selecione a aplicação antes de capturar o próximo cartão.');}else setScreen('scan');
   }
   if(educatorRegistration)return <EducatorRegistrationScreen apiUrl={API_URL} onBack={()=>setEducatorRegistration(false)} onCreated={(value,role)=>{setEducatorRegistration(false);setEmail(value);setPassword('');setShowPassword(false);setError('');setMessage(`Conta de ${role==='coordinator'?'coordenador':'professor'} criada. Confirme o link enviado ao seu e-mail e depois entre aqui.`);}} />;
-  if(studentAccess)return <StudentScreen apiUrl={API_URL} onBack={()=>setStudentAccess(false)} />;
+  if(studentAccess&&hostProfile==='teacher')return <SafeAreaView style={ui.safe}><ScrollView contentContainerStyle={ui.container}>
+    <Text style={ui.eyebrow}>UFA PROVA</Text><Text style={ui.title}>Conta de aluno</Text>
+    <Text style={ui.text}>Esta entrada é a área do professor. Suas notas e turmas ficam na área do aluno.</Text>
+    <Pressable accessibilityRole="button" style={ui.primary} onPress={()=>switchProfile('student')}><Text style={ui.primaryText}>Abrir área do aluno</Text></Pressable>
+    <Pressable accessibilityRole="button" style={ui.secondary} onPress={()=>{void endSession(API_URL).then(()=>SecureStore.deleteItemAsync(STUDENT_SESSION_KEY)).finally(()=>setStudentAccess(false));}}><Text style={ui.buttonText}>Sair e entrar como professor</Text></Pressable>
+  </ScrollView></SafeAreaView>;
+  if(studentAccess||hostProfile==='student')return <StudentScreen apiUrl={API_URL} onBack={()=>setStudentAccess(false)} onTeacherArea={hostProfile==='student'?()=>switchProfile('teacher'):undefined} />;
   return <SafeAreaView style={ui.safe}><ScrollView contentContainerStyle={ui.container} keyboardShouldPersistTaps="handled">
     <Text style={ui.eyebrow}>UFA PROVA</Text><Text style={ui.title}>Correção de avaliações</Text>
     {booting ? <ActivityIndicator accessibilityLabel="Abrindo dados locais" /> : screen === 'login' ? <>
-      <Pressable accessibilityRole="button" style={ui.secondary} onPress={()=>setStudentAccess(true)}><Text style={ui.buttonText}>Sou aluno · entrar ou criar conta</Text></Pressable>
-      <Text style={ui.text}>Entre uma vez com internet. Depois, as escolas, avaliações e turmas já carregadas ficam disponíveis neste aparelho.</Text>
+      <Pressable accessibilityRole="button" style={ui.secondary} onPress={()=>hostProfile==='teacher'?switchProfile('student'):setStudentAccess(true)}><Text style={ui.buttonText}>{hostProfile==='teacher'?'Sou aluno · abrir área do aluno':'Sou aluno · entrar ou criar conta'}</Text></Pressable>
+      <Text style={ui.text}>{PERSISTENT_STORE ? 'Entre uma vez com internet. Depois, as escolas, avaliações e turmas já carregadas ficam disponíveis neste aparelho.' : 'No navegador, nada da escola fica salvo no aparelho: as fotos ficam só nesta aba até serem enviadas.'}</Text>
       <TextInput style={ui.input} accessibilityLabel="E-mail" autoCapitalize="none" keyboardType="email-address" placeholder="E-mail" value={email} onChangeText={setEmail} />
       <TextInput style={ui.input} accessibilityLabel="Senha" secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder="Senha" value={password} onChangeText={setPassword} />
       <Pressable accessibilityRole="button" accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'} style={ui.passwordToggle} onPress={() => setShowPassword(value => !value)}><Text style={ui.linkText}>{showPassword ? 'Ocultar senha' : 'Mostrar senha'}</Text></Pressable>
+      <Pressable accessibilityRole="button" disabled={loading} style={ui.passwordToggle} onPress={()=>{setError('');setMessage('');void requestPasswordReset(API_URL,email).then(setMessage,err=>setError(err instanceof Error?err.message:'Não foi possível pedir uma nova senha.'));}}><Text style={ui.linkText}>Esqueci minha senha</Text></Pressable>
       {!!error && <Text style={ui.error}>{error}</Text>}
       <Pressable disabled={loading || !store || !!googleAttempt} style={[ui.primary, (loading || !store || !!googleAttempt) && ui.disabled]} onPress={signIn}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={ui.primaryText}>Entrar</Text>}</Pressable>
       <Text style={ui.separator}>ou</Text>
@@ -273,6 +289,7 @@ export default function App() {
       <Text style={ui.small}>{account?.displayName} • {connected ? 'Conectado' : 'Sem conexão'}</Text>
       <View style={ui.options}>
         <Pressable style={ui.secondary} onPress={() => setScreen('records')}><Text style={ui.buttonText}>Digitalizações ({records.length})</Text></Pressable>
+        {unsent && <Text style={ui.small}>Há fotos aguardando envio. No navegador elas existem só nesta aba: mantenha-a aberta até o envio terminar.</Text>}
         <Pressable disabled={!connected || syncing} style={[ui.secondary, (!connected || syncing) && ui.disabled]} onPress={() => { void sync(true); }}><Text style={ui.buttonText}>{syncing ? 'Sincronizando…' : 'Sincronizar agora'}</Text></Pressable>
       </View>
       {operations.length > 0 && <Text style={ui.small}>{operations.length} alteração(ões) ainda não sincronizada(s).</Text>}
@@ -289,11 +306,15 @@ export default function App() {
         {loading && <ActivityIndicator />}
         <Text style={ui.title}>Selecione a aplicação da prova</Text>
         <Text style={ui.text}>Use o cartão de respostas com QR Code gerado no portal. Confira também a escola impressa no cartão.</Text>
-        {!applications.length && <><Text style={ui.text}>Nenhuma aplicação disponível. No portal, abra Turmas e alunos, agende a avaliação para a turma e gere os cartões individuais.</Text><Pressable style={ui.secondary} onPress={()=>void Linking.openURL(`${process.env.EXPO_PUBLIC_PORTAL_URL || 'https://ufaprova-frontend.onrender.com'}/portal`).catch(()=>setError('Não foi possível abrir o portal.'))}><Text style={ui.buttonText}>Abrir portal para preparar os cartões</Text></Pressable></>}
-        {applications.map(item=><Pressable key={item.id} accessibilityRole="radio" accessibilityState={{selected:selectedApplication?.id===item.id}} style={[ui.card,selectedApplication?.id===item.id&&ui.selected]} onPress={()=>{setSelectedApplication(item);setAssessment({id:item.assessmentId,title:item.title});setSchoolClass({id:item.classId,name:item.className});}}><Text style={ui.cardTitle}>{item.title}</Text><Text style={ui.text}>{item.className} · {item.students} alunos</Text></Pressable>)}
-        <Pressable disabled={!selectedApplication||loading} style={[ui.primary,(!selectedApplication||loading)&&ui.disabled]} onPress={()=>setScreen('scan')}><Text style={ui.primaryText}>Continuar para captura</Text></Pressable>
+        {!applications.length && <><Text style={ui.text}>Nenhuma aplicação disponível. No portal, abra Turmas e alunos, agende a avaliação para a turma e gere os cartões individuais.</Text><Pressable style={ui.secondary} onPress={()=>void Linking.openURL(`${PORTAL_URL}/portal`).catch(()=>setError('Não foi possível abrir o portal.'))}><Text style={ui.buttonText}>Abrir portal para preparar os cartões</Text></Pressable></>}
+        {applications.map(item=><Pressable key={item.id} accessibilityRole="radio" accessibilityState={{selected:selectedApplication?.id===item.id}} style={[ui.card,selectedApplication?.id===item.id&&ui.selected]} onPress={()=>{setSelectedApplication(item);setAssessment({id:item.assessmentId,title:item.title});setSchoolClass({id:item.classId,name:item.className});}}><Text style={ui.cardTitle}>{item.title}</Text><Text style={ui.text}>{[item.subject,item.className,`${item.students} alunos`].filter(Boolean).join(' · ')}</Text>{!!answerKeyLine(item)&&<Text style={ui.small}>{answerKeyLine(item)}</Text>}{!!answerKeyProblem(item)&&<Text style={ui.error}>{answerKeyProblem(item)}</Text>}</Pressable>)}
+        <Pressable disabled={!selectedApplication||loading||!!answerKeyProblem(selectedApplication)} style={[ui.primary,(!selectedApplication||loading||!!answerKeyProblem(selectedApplication))&&ui.disabled]} onPress={()=>setScreen('scan')}><Text style={ui.primaryText}>Continuar para captura</Text></Pressable>
+        <Pressable disabled={!selectedApplication||!connected} style={[ui.secondary,(!selectedApplication||!connected)&&ui.disabled]} onPress={()=>setScreen('results')}><Text style={ui.buttonText}>Revisar e autorizar resultados</Text></Pressable>
+        {!!selectedApplication&&!connected&&<Text style={ui.small}>A revisão e a autorização dos resultados exigem conexão.</Text>}
         <Pressable style={ui.secondary} onPress={() => setScreen('home')}><Text style={ui.buttonText}>Trocar escola</Text></Pressable>
-      </> : screen === 'scan' && school && assessment && schoolClass ? <CaptureScreen applicationId={selectedApplication?.id} school={school} assessment={assessment} schoolClass={schoolClass} onConfirm={saveCapture} onBack={() => setScreen('assessments')} /> : screen === 'record' && selectedRecord && store ? <RecordScreen key={selectedRecord.id} record={selectedRecord} operations={operations} store={store} connected={connected} onSaved={reload} onRefresh={refreshSelected} onRetry={retrySelected} onNext={() => nextCapture(selectedRecord)} onBack={() => setScreen('records')} /> : <>
+      </> : screen === 'results' && selectedApplication && client ? <ResultsScreen key={selectedApplication.id} client={client} applicationId={selectedApplication.id} connected={connected} newId={Crypto.randomUUID}
+          onReviewScan={scanId=>{const local=records.find(record=>record.remoteId===scanId);if(!local)return false;setRecordId(local.id);setScreen('record');return true;}} onBack={()=>setScreen('assessments')} />
+      : screen === 'scan' && school && assessment && schoolClass ? <CaptureScreen applicationId={selectedApplication?.id} school={school} assessment={assessment} schoolClass={schoolClass} onConfirm={saveCapture} onBack={() => setScreen('assessments')} /> : screen === 'record' && selectedRecord && store ? <RecordScreen key={selectedRecord.id} record={selectedRecord} operations={operations} store={store} connected={connected} onSaved={reload} onRefresh={refreshSelected} onRetry={retrySelected} onNext={() => nextCapture(selectedRecord)} onBack={() => setScreen('records')} /> : <>
         <Text style={ui.title}>Digitalizações salvas</Text>
         {!records.length && <Text style={ui.text}>As folhas capturadas aparecerão aqui, mesmo sem conexão.</Text>}
         {records.map(record => <Pressable key={record.id} style={ui.card} onPress={() => { setRecordId(record.id); setScreen('record'); }}><Text style={ui.cardTitle}>{record.sheet.assessmentTitle} • {record.sheet.className}</Text><Text style={ui.small}>{localStatus(record, operations)}</Text><Text style={ui.small}>{record.sheet.schoolName}</Text></Pressable>)}

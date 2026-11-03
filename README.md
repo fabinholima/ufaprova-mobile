@@ -23,6 +23,32 @@ npx expo start
 
 Configure `EXPO_PUBLIC_API_URL` para usar outra API. O projeto usa Expo SDK 58. Use uma versão compatível do Expo Go ou uma compilação de desenvolvimento. Permissões alteradas em `app.json` exigem recompilar o aplicativo instalado.
 
+## Versão web (PWA)
+
+O mesmo código é publicado como site estático em dois endereços:
+
+- `https://professor.ufaprova.com.br` abre a entrada do professor;
+- `https://aluno.ufaprova.com.br` abre direto a área do aluno.
+
+O subdomínio só escolhe a tela inicial; as permissões são da API. Uma conta de aluno que entra pela entrada do professor recebe a opção **Abrir área do aluno**, já conectada.
+
+```bash
+cp .env.example .env.local   # endereços locais
+npx expo start --web         # desenvolvimento: http://localhost:8081/?perfil=professor ou ?perfil=aluno
+npx expo export --platform web   # build de produção em dist/
+```
+
+No navegador:
+
+- A sessão fica no cookie HttpOnly da API. Nenhum token vai para localStorage, sessionStorage ou IndexedDB. Ao reabrir, a sessão é restaurada por `GET /api/auth/me`. A entrada Google troca o token pelo cookie em `POST /api/auth/session/cookie`.
+- Nada da escola é gravado no aparelho. Fotos de cartões, listas e rascunhos ficam só na memória da aba (`memory-store.ts`, com as mesmas regras do SQLite do aplicativo). O navegador avisa antes de fechar a aba com fotos ainda não enviadas.
+- O service worker (`public/sw.js`) guarda apenas os arquivos públicos do próprio site: página, scripts com hash e ícones. Ele não intercepta a API nem respostas `no-store`; notas e fotos nunca entram no cache.
+- A câmera exige HTTPS e a permissão do navegador.
+
+Os módulos com versão `.web.ts` (`platform-http`, `platform-store`, `host-profile`, `offline-runtime`) substituem os nativos só no build web. O aplicativo nativo continua usando SecureStore e SQLite.
+
+Publicação: `render.yaml` descreve o site estático `ufaprova-pwa`, com os cabeçalhos de segurança (CSP, Permissions-Policy, HSTS) e o cache. O arquivo não cria o serviço; os passos, o DNS e o domínio recomendado para a API (`api.ufaprova.com.br`) estão em `docs/pwa-subdominios.md` no repositório da API.
+
 ## Entrada com Google e senha
 
 O campo de senha oferece **Mostrar senha** e **Ocultar senha**. A senha começa oculta e volta a ficar oculta depois da entrada.
@@ -109,11 +135,28 @@ O acesso **Sou aluno** oferece cadastro com e-mail e senha, entrada pelo Google,
 
 No portal, o professor abre **Turmas e alunos → Convidar alunos**, seleciona a escola cadastrada e compartilha código/link/QR. A solicitação fica pendente até a confirmação explícita do cadastro pelo responsável. Nenhum cadastro existente é associado automaticamente por nome.
 
+Quem recebeu do professor o código pessoal do aluno (`UFA-XXXXXXXX`) usa **Tenho o código do aluno**: o app mostra nome, escola e turmas do cadastro e, depois de **Sou eu, vincular minha conta**, a conta passa a valer na hora para as turmas desse cadastro, sem aprovação. O código vale para uma única conta; o professor pode desvincular no portal, o que gera um novo código. Rotas: `POST /api/student/access-code/inspect` e `POST /api/student/access-code/claim` (`{ code }`). Um servidor sem essas rotas responde 403 e o app orienta a usar o código da turma.
+
 O aluno vê apenas seus próprios vínculos e atividades das turmas aprovadas. Notas que ainda exigem revisão do professor não são exibidas. A sessão de aluno fica separada do armazenamento offline de correção.
+
+A tela de notas começa em **Minhas disciplinas**, com uma entrada por disciplina, o número de avaliações e a média de acertos. Com uma única disciplina, ela abre direto. Dentro da disciplina aparecem:
+
+- a evolução e as notas por período;
+- em cada avaliação, acertos, erros, questões em branco, inválidas e anuladas;
+- os indicadores das habilidades da BNCC, com a quantidade de questões consideradas. Abaixo de 3 questões, o app avisa que ainda não há base para conclusões.
+
+Avaliações publicadas abrem **Ver questões e orientações**, com:
+
+- a marcação do aluno e o gabarito, conforme o que o professor liberou;
+- a orientação publicada pelo professor.
+
+O aluno só vê resultados autorizados pelo professor. Resultados em correção aparecem sem nota. Não há comparação com colegas. Rotas: `GET /api/student/results/:resultId` e `GET /api/student/skill-performance`; uma API sem elas mantém as notas visíveis.
+
+As notas aparecem em **Notas por período**, agrupadas pela data da aplicação em períodos trimestrais do ano civil (1º período: jan–mar, 2º: abr–jun, 3º: jul–set, 4º: out–dez). Não há calendário escolar cadastrado; aplicações sem data ficam em **Sem data de aplicação**. Cada período mostra a média do percentual de acerto. **Minha evolução** mostra as últimas oito avaliações com nota e compara a média dos dois períodos mais recentes. Notas em revisão manual não entram nas médias. A lista vem de `GET /api/student/activities` e inclui somente resultados de cartões lidos pela câmera ou pelo scanner.
 
 Depois da aprovação, a seção **Meu cadastro** mostra o cadastro vinculado e permite **Adicionar foto** ou **Trocar foto** com a câmera frontal. O app reduz a imagem para JPEG de até 400 KB e a envia para `POST /api/student/profile` (`{ studentId, selfieDataUrl }`). Antes da aprovação a foto não fica disponível. Se a API ainda não oferecer essa rota, notas e solicitações continuam visíveis.
 
-A API requer as migrações `070_class_invites.sql` e `071_student_accounts_class_links.sql`. As rotas e restrições estão documentadas no portal em `docs/class-invites-api.md`. Para portais com outro endereço, configure `EXPO_PUBLIC_PORTAL_URL`; o leitor aceita somente convites desse portal.
+A API requer as migrações `070_class_invites.sql` e `071_student_accounts_class_links.sql`. As rotas e restrições estão documentadas no portal em `docs/class-invites-api.md`. O leitor aceita convites de `https://ufaprova.com.br`, `https://www.ufaprova.com.br` e `https://ufaprova-frontend.onrender.com`. Para outros endereços, configure `EXPO_PUBLIC_PORTAL_URL` com a lista de origens separadas por vírgula; ela substitui a lista padrão.
 
 ## Cadastro de professor e coordenador no aplicativo
 
@@ -128,3 +171,46 @@ Na entrada, use **Criar conta de professor/coordenador**. Escolha o perfil, info
 5. Leituras incompletas, respostas em branco ou marcações duvidosas exigem revisão e confirmação do professor. O resultado definitivo vem do servidor. Depois, use **Capturar próxima folha** para continuar a mesma aplicação.
 
 O envio guarda a aplicação escolhida; o servidor bloqueia QR de outra aplicação antes de gerar nota. A revisão também não pode trocar esse vínculo. Dados de versões anteriores do aplicativo permanecem no aparelho; novas capturas exigem aplicação válida e a atualização da API/worker com `072_mobile_scan_application.sql`.
+
+## Conferência antes da captura
+
+- A lista de aplicações mostra disciplina, turma, número de questões e versões do gabarito.
+- Gabarito incompleto aparece em vermelho, com as questões, e desativa **Continuar para captura**. O servidor também recusa o envio (422).
+- Além da câmera, **Escolher foto da galeria** aceita cartões já fotografados; a foto passa pela mesma conferência e fila.
+- Foto desfocada ou escura não muda a leitura: o cartão vai para revisão, com a orientação de fotografar de novo.
+- **Esqueci minha senha** (professor e aluno) envia o link de nova senha ao e-mail.
+
+`expo-image-picker` é um módulo nativo novo: gere uma nova compilação do aplicativo antes de distribuir esta versão.
+
+O relatório de entrega, com critérios de aceite, implantação e pendências, está em `docs/relatorio-entrega.md` no repositório da API.
+
+## Revisão e autorização dos resultados
+
+A correção gera apenas um resultado provisório. O aluno só vê a nota depois
+que o professor autoriza o lançamento (API: `docs/resultados-publicacao.md`).
+
+1. Em **Selecione a aplicação da prova**, escolha a aplicação e toque em **Revisar e autorizar resultados**. A tela exige conexão; os resultados não ficam guardados no aparelho.
+2. A lista mostra cada aluno com:
+   - o estado da leitura e da publicação;
+   - acertos, erros, questões em branco, inválidas e anuladas, e o percentual;
+   - pendências: leitura duvidosa, discursiva sem nota ou outro cartão do mesmo aluno aguardando decisão;
+   - um aviso quando o resultado fica abaixo do mínimo esperado.
+3. **Detalhes** mostra, por questão, o que foi lido e o gabarito, além da foto original (carregada com a sessão, sem link público), das alterações e das publicações. Cartões em revisão enviados por este aparelho abrem em **Revisar leitura deste cartão**; os demais devem ser revisados no portal.
+4. Selecione os resultados prontos (um por um ou **Selecionar todos os prontos**) e toque em **Autorizar lançamento**. A tela de confirmação lista os alunos afetados. A publicação só acontece em **Confirmar e publicar**.
+5. O servidor publica apenas a versão que você conferiu. Se a leitura mudou depois, o item volta como alterado e precisa ser conferido de novo. Repetir o envio após uma falha de conexão não gera outro lançamento.
+6. Em **Regras da avaliação**, ajuste:
+   - o mínimo esperado;
+   - o que o aluno vê em cada questão;
+   - as questões anuladas, com a forma de pontuação.
+
+   Alterar anulações recalcula a aplicação inteira e pede confirmação. Os resultados já publicados continuam visíveis na versão anterior até uma nova autorização.
+7. Baixo rendimento não impede a publicação. Depois de publicar, a tela informa quantos resultados ficaram abaixo do mínimo esperado, e a lista marca cada um como **justificativa pendente** até haver um registro com motivo.
+8. Em **Detalhes** › **Registrar justificativa** (ou **Atualizar acompanhamento**), escolha:
+   - os motivos observados, que começam todos desmarcados (**Outro motivo** exige descrição);
+   - as ações pedagógicas;
+   - uma observação interna, que o aluno nunca vê;
+   - uma orientação ao aluno, que ele só vê se você marcar **Publicar orientação ao aluno**.
+
+   Cada atualização cria uma nova entrada; o histórico anterior continua visível no detalhe.
+
+Com a assinatura da instituição inativa, novos envios de fotos aguardam na fila (resposta 402), sem perder a captura.

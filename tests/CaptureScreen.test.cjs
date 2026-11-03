@@ -8,7 +8,7 @@ global.IS_REACT_ACT_ENVIRONMENT = true;
 const text = (node) => (typeof node === "string" ? node : (node.children || []).map(text).join(""));
 async function setup(
   t,
-  { permission = { granted: true, canAskAgain: true }, takePictureAsync, onConfirm } = {},
+  { permission = { granted: true, canAskAgain: true }, takePictureAsync, onConfirm, gallery = async () => ({ canceled: true }) } = {},
 ) {
   let cameraProps,
     lifecycle,
@@ -45,6 +45,7 @@ async function setup(
       Text: "Text",
       View: "View",
     },
+    "expo-image-picker": { launchImageLibraryAsync: (options) => gallery(options) },
     "expo-camera": {
       CameraView: Camera,
       useCameraPermissions: () => [permission, request, refresh],
@@ -155,4 +156,25 @@ test("backgrounding the app releases the camera and requires readiness again on 
       .findAllByType("Pressable")
       .find((n) => n.props.accessibilityLabel === "Fotografar folha de respostas").props.disabled,
   );
+});
+
+test("a photo from the gallery goes through the same review and confirmation, even without camera permission", async (t) => {
+  const sheets = [], requested = [];
+  const h = await setup(t, {
+    permission: { granted: false, canAskAgain: true },
+    gallery: async (options) => { requested.push(options); return { canceled: false, assets: [{ uri: "file:///gallery.jpg", width: 3000, height: 4000 }] }; },
+    onConfirm: (sheet) => { sheets.push(sheet); },
+  });
+  const press = async (label) => {
+    const button = h.component.root.findAll((node) => node.type === "Pressable" && text(node).includes(label))[0];
+    assert(button, `Missing ${label}`);
+    await renderer.act(async () => button.props.onPress());
+  };
+  await press("Escolher foto da galeria");
+  assert.deepEqual(requested[0].mediaTypes, ["images"]);
+  assert.match(text(h.component.root), /Confira se a folha inteira/);
+  assert.equal(sheets.length, 0, "escolher não envia sozinho");
+  await press("Usar esta foto");
+  assert.equal(sheets[0].photo.uri, "file:///gallery.jpg");
+  assert.equal(sheets[0].applicationId, "application-id");
 });

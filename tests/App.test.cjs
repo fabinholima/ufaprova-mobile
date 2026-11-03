@@ -5,20 +5,23 @@ const school={id:'s',name:'Escola'},assessment={id:'10000000-0000-4000-8000-0000
 function text(node){return typeof node==='string'?node:node.children.map(text).join('');}function button(component,label){return component.root.findAllByType('Pressable').find(node=>text(node).includes(label));}
 async function setup(t, options = {}){
   const db=open(),store=createOfflineStore(db,randomUUID);await store.initialize();t.after(()=>db.close());
-  const application={id:'30000000-0000-4000-8000-000000000001',assessmentId:assessment.id,classId:schoolClass.id,title:assessment.title,className:schoolClass.name,status:'scheduled',students:1,completed:1};
+  const application={id:'30000000-0000-4000-8000-000000000001',assessmentId:assessment.id,classId:schoolClass.id,title:assessment.title,className:schoolClass.name,status:'scheduled',students:1,completed:1,...options.application};
   await store.putCache(account.owner,'applications',[application]);
   await store.putCache(account.owner,'schools',[school]);await store.putCache(account.owner,'assessments',[assessment]);await store.putCache(account.owner,'classes',[schoolClass]);
   let network;let token=options.login ? null : JSON.stringify({...account,sessionToken:'token'});let uploads=0;
-  let openedUrl;let googleReady=false;
+  let openedUrl;let googleReady=false;const switched=[];
   const client={capabilities:async()=>{},upload:async(data,id)=>{uploads++;return {id,status:'completed'}},read:async id=>({id,status:'completed',submissionId:null,revision:null,score:null,maxScore:null,requiresManualReview:false,imageAvailable:true,candidates:[],detectedAnswers:[]}),catalog:async path=>path==='/api/educator-profile'?{schools:[school]}:path==='/api/classes'?[schoolClass]:path==='/api/assessment-applications'?[application]:[assessment]};
   const Capture=props=>React.createElement('Pressable',{onPress:()=>props.onConfirm({applicationId:props.applicationId,photo:{uri:'file:///photo.jpg',width:1000,height:2000},schoolId:props.school.id,assessmentId:props.assessment.id,classId:props.schoolClass.id,schoolName:props.school.name,assessmentTitle:props.assessment.title,className:props.schoolClass.name})},React.createElement('Text',null,'Confirmar foto de teste'));
   const Record=props=>React.createElement('Text',null,`Registro ${props.record.sheet.assessmentTitle}: ${props.record.remoteId?'enviado':'salvo localmente'}`);
   const {default:App}=load(path.join(__dirname,'../App.tsx'),{
     './StudentScreen':()=>React.createElement('Text',null,'Painel do aluno'),
     'react-native':{ActivityIndicator:'ActivityIndicator',AppState:{currentState:'active',addEventListener:()=>({remove(){}})},Linking:{openURL:async url=>{openedUrl=url}},Pressable:'Pressable',SafeAreaView:'SafeAreaView',ScrollView:'ScrollView',Text:'Text',TextInput:'TextInput',View:'View',StyleSheet:{create:x=>x}},
+    'expo-crypto':{randomUUID:()=>'60000000-0000-4000-8000-000000000001'},
+    './ResultsScreen':{default:props=>React.createElement('Text',null,`Resultados ${props.applicationId}`),__esModule:true},
     '@react-native-community/netinfo':{addEventListener:listener=>{network=listener;listener({isConnected:false,isInternetReachable:false});return()=>{}}},
-    'expo-secure-store':{getItemAsync:async()=>token,deleteItemAsync:async()=>{token=null},setItemAsync:async(_,v)=>{token=v}},
-    './offline-runtime':{ACCOUNT_KEY:'ufaprova.account',getStore:async()=>store,accountClient:()=>client,accountFromLogin:()=>account},
+    './host-profile':{hostProfile:options.hostProfile??null,switchProfile:profile=>{switched.push(profile)},warnBeforeLeaving:()=>()=>{}},
+    'expo-secure-store':{getItemAsync:async key=>key==='ufaprova.student.session.v1'?options.studentSession??null:token,deleteItemAsync:async()=>{token=null},setItemAsync:async(_,v)=>{token=v}},
+    './offline-runtime':{ACCOUNT_KEY:'ufaprova.account',PERSISTENT_STORE:true,getStore:async()=>store,accountClient:()=>client,accountFromLogin:()=>account},
     './prepare-image':{prepareImage:async()=> 'data:image/jpeg;base64,YQ=='},
     './google-login':{startGoogleLogin:async()=>({id:'attempt',token:'google-session',browserUrl:'https://ufaprova-api.onrender.com/api/auth/google/mobile/browser?ticket=test',expiresAt:Date.now()+600000}),checkGoogleLogin:async()=>googleReady},
     './CaptureScreen':{default:Capture,__esModule:true},'./RecordScreen':{default:Record,__esModule:true,localStatus:record=>record.remoteId?'Sincronizada':'Pendente'},
@@ -26,7 +29,7 @@ async function setup(t, options = {}){
   let component;await renderer.act(async()=>{component=renderer.create(React.createElement(App));});
   t.after(async()=>renderer.act(async()=>component.unmount()));
   async function press(label){const b=button(component,label);assert(b,`Missing button ${label}`);assert(!b.props.disabled,`Disabled ${label}`);await renderer.act(async()=>b.props.onPress());}
-  return {component,store,press,connect:async()=>renderer.act(async()=>network({isConnected:true,isInternetReachable:true})),get uploads(){return uploads},get openedUrl(){return openedUrl},googleReady:()=>{googleReady=true},get credentials(){return token}};
+  return {component,store,press,connect:async()=>renderer.act(async()=>network({isConnected:true,isInternetReachable:true})),get uploads(){return uploads},get openedUrl(){return openedUrl},googleReady:()=>{googleReady=true},get credentials(){return token},switched};
 }
 test('startup restores cached account and lists, and an offline capture survives navigation',async t=>{
   const h=await setup(t);assert(text(h.component.root).includes('Sem conexão'));assert(text(h.component.root).includes('Escola'));
@@ -74,4 +77,50 @@ test('native coordinator signup returns to login with the email filled and never
  const h=await setup(t,{login:true});await h.press('Criar conta de professor/coordenador');await h.press('Coordenador');await h.press('Ensino Médio');
  for(const [label,value] of [['Nome completo','Coordenador Teste'],['E-mail do professor ou coordenador','coord@example.test'],['CPF','12345678909'],['Senha para nova conta','TestPassword123!'],['Confirmar senha','TestPassword123!'],['Nome da escola','Escola Teste'],['Endereço da escola','Rua Teste, 1'],['Cidade da escola','Campo Grande'],['Estado da escola (UF)','MS']])await renderer.act(async()=>h.component.root.findAllByType('TextInput').find(n=>n.props.accessibilityLabel===label).props.onChangeText(value));
  await h.press('Criar minha conta');assert.equal(calls,1);assert.equal(h.credentials,null);assert(text(h.component.root).includes('Confirme o link enviado ao seu e-mail'));assert.equal(h.component.root.findAllByType('TextInput').find(n=>n.props.accessibilityLabel==='E-mail').props.value,'coord@example.test');
+});
+test('result review opens for the selected application only with a connection',async t=>{
+  const h=await setup(t);await h.press('Corrigir cartões de respostas');await h.press('Prova');
+  assert.equal(button(h.component,'Revisar e autorizar resultados').props.disabled,true);
+  assert(text(h.component.root).includes('exigem conexão'));
+  await h.connect();await h.press('Revisar e autorizar resultados');
+  assert(text(h.component.root).includes('Resultados 30000000-0000-4000-8000-000000000001'));
+});
+
+test('on the web the aluno subdomain opens the student area directly',async t=>{
+  const h=await setup(t,{login:true,hostProfile:'student'});
+  assert.match(text(h.component.root),/Painel do aluno/);
+});
+test('on the professor subdomain the student entry goes to the student site',async t=>{
+  const h=await setup(t,{login:true,hostProfile:'teacher'});
+  await h.press('Sou aluno · abrir área do aluno');
+  assert.deepEqual(h.switched,['student']);
+  assert.doesNotMatch(text(h.component.root),/Painel do aluno/);
+});
+test('a student session on the professor subdomain is sent to the student area, not mixed in',async t=>{
+  const h=await setup(t,{login:true,hostProfile:'teacher',studentSession:JSON.stringify({apiUrl:'https://ufaprova-api.onrender.com',token:'cookie-session'})});
+  assert.match(text(h.component.root),/Conta de aluno/);
+  assert.doesNotMatch(text(h.component.root),/Painel do aluno/);
+  await h.press('Abrir área do aluno');
+  assert.deepEqual(h.switched,['student']);
+});
+
+test('an assessment with an incomplete answer key shows the versions and cannot start correction',async t=>{
+  const h=await setup(t,{application:{subject:'Química',versions:[{code:'A',questions:10,objective:10,missingAnswerKeys:[3,7]}],answerKeyReady:false}});
+  await h.press('Corrigir cartões de respostas');await h.press('Prova');
+  const screen=text(h.component.root);
+  assert.match(screen,/Química · Turma · 1 alunos/);
+  assert.match(screen,/10 questões · gabarito versão A/);
+  assert.match(screen,/Gabarito incompleto na versão A \(questões 3, 7\)/);
+  assert.equal(button(h.component,'Continuar para captura').props.disabled,true);
+});
+test('forgot password asks for the e-mail and gives the same answer whether or not the account exists',async t=>{
+  const h=await setup(t,{login:true});const calls=[];const previous=global.fetch;t.after(()=>{global.fetch=previous;});
+  global.fetch=async(url,options)=>{calls.push({url,body:JSON.parse(options.body)});return Response.json({data:{accepted:true}},{status:202});};
+  await h.press('Esqueci minha senha');
+  assert.match(text(h.component.root),/Informe o e-mail da conta/);assert.equal(calls.length,0);
+  const email=h.component.root.findAll(node=>node.type==='TextInput'&&node.props.accessibilityLabel==='E-mail')[0];
+  await renderer.act(async()=>email.props.onChangeText(' professor@example.test '));
+  await h.press('Esqueci minha senha');
+  assert.equal(calls[0].url,'https://ufaprova-api.onrender.com/api/auth/forgot-password');assert.deepEqual(calls[0].body,{email:'professor@example.test'});
+  assert.match(text(h.component.root),/Se houver uma conta com este e-mail/);
 });

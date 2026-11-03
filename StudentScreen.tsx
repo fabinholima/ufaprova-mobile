@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import {
   ActivityIndicator,
   AppState,
@@ -12,9 +12,12 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as SecureStore from "expo-secure-store";
+import { sessionStore as SecureStore } from "./platform-store";
+import { loginToken, persistSession } from "./platform-http";
 import StudentInviteScanner from "./StudentInviteScanner";
 import StudentPhotoScreen from "./StudentPhotoScreen";
+import StudentGrades from "./StudentGrades";
+import StudentCodeJoin from "./StudentCodeJoin";
 import { ui } from "./ui-styles";
 import { createStudentClient, verifyStudentSession, STUDENT_SESSION_KEY } from "./student-api";
 import type {
@@ -25,8 +28,11 @@ import type {
   StudentProfile,
 } from "./student-api";
 import { startGoogleLogin, checkGoogleLogin } from "./google-login";
+import { requestPasswordReset } from "./password-reset";
 import type { GoogleAttempt } from "./google-login";
-export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBack: () => void }) {
+// onTeacherArea: na web (aluno.<domínio>), leva à área do professor em vez de
+// voltar para a tela de entrada do aplicativo.
+export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUrl: string; onBack: () => void; onTeacherArea?: () => void }) {
   const [scanning, setScanning] = useState(false),
     [activities, setActivities] = useState<StudentActivity[]>([]),
     [profiles, setProfiles] = useState<StudentProfile[] | null>([]),
@@ -44,6 +50,7 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState<GoogleAttempt | null>(null);
+  const gradesRequest = useMemo(() => createStudentClient(apiUrl, token), [apiUrl, token]);
   const current = useRef<GoogleAttempt | null>(null),
     checking = useRef(false);
   async function run(fn: () => Promise<void>) {
@@ -69,7 +76,8 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
     setActivities(own);
     setProfiles(profile);
   }
-  async function accept(value: string) {
+  async function accept(received: string) {
+    const value = await persistSession(apiUrl, received);
     const user = await verifyStudentSession(apiUrl, value);
     await SecureStore.setItemAsync(STUDENT_SESSION_KEY, JSON.stringify({ apiUrl, token: value }));
     setIdentity(user);
@@ -229,12 +237,13 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
                   "Enviamos um link de confirmação para seu e-mail. Confirme-o no navegador e entre aqui.",
                 );
               } else {
-                const result = await client<{ token: string }>("/api/auth/login", {
+                const result = await client<{ token?: string }>("/api/auth/login", {
                   email: email.trim(),
                   password,
                 });
-                if (!result?.token) throw Error("Sessão inválida.");
-                await accept(result.token);
+                const value = loginToken(result);
+                if (!value) throw Error("Sessão inválida.");
+                await accept(value);
               }
             })}
             {!attempt &&
@@ -281,6 +290,12 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
                 {mode === "login" ? "Criar conta de aluno" : "Já tenho conta"}
               </Text>
             </Pressable>
+            {mode === "login" &&
+              button(
+                "Esqueci minha senha",
+                async () => setMessage(await requestPasswordReset(apiUrl, email)),
+                true,
+              )}
             {button(
               "Reenviar confirmação de e-mail",
               async () => {
@@ -291,16 +306,30 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
               },
               true,
             )}
-            <Pressable style={ui.secondary} onPress={onBack}>
-              <Text style={ui.buttonText}>Voltar para acesso de professor</Text>
+            <Pressable style={ui.secondary} onPress={onTeacherArea ?? onBack}>
+              <Text style={ui.buttonText}>{onTeacherArea ? "Sou professor · abrir área do professor" : "Voltar para acesso de professor"}</Text>
             </Pressable>
           </>
         ) : (
           <>
             <Text style={ui.text}>Olá, {identity.user.displayName}.</Text>
-            <Text style={ui.title}>Entrar em uma turma</Text>
+            <StudentCodeJoin
+              apiUrl={apiUrl}
+              token={token}
+              busy={busy}
+              run={run}
+              onLinked={async (claim) => {
+                await refresh();
+                setMessage(
+                  claim.classes.length
+                    ? `Conta vinculada. Turmas: ${claim.classes.map((c) => c.className).join(", ")}.`
+                    : "Conta vinculada ao seu cadastro.",
+                );
+              }}
+            />
+            <Text style={ui.title}>Entrar com o código da turma</Text>
             <Text style={ui.small}>
-              Digite o código fornecido pelo professor. O vínculo depende da aprovação dele.
+              Digite o código da turma fornecido pelo professor. O vínculo depende da aprovação dele.
             </Text>
             <TextInput
               style={ui.input}
@@ -392,23 +421,7 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
                 </View>
               ))
             )}
-            <Text style={ui.title}>Minhas atividades e resultados</Text>
-            {!activities.length && <Text style={ui.small}>Nenhuma atividade disponível.</Text>}
-            {activities.map((a) => (
-              <View key={a.id} style={ui.card}>
-                <Text style={ui.cardTitle}>{a.title}</Text>
-                <Text style={ui.small}>
-                  {a.schoolName} · {a.className}
-                </Text>
-                <Text style={ui.text}>
-                  {a.requiresManualReview
-                    ? "Aguardando revisão do professor"
-                    : a.score !== null
-                      ? `Resultado: ${a.score} / ${a.maxScore}`
-                      : "Sem resultado disponível"}
-                </Text>
-              </View>
-            ))}
+            <StudentGrades activities={activities} request={gradesRequest} />
             {button(
               "Sair",
               async () => {

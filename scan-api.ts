@@ -1,7 +1,10 @@
+import { authHeaders, credentials } from './platform-http';
 import { parseSubmission } from './manual-contract';
 import type { ManualPayload, Submission } from './manual-contract';
 import { isPending, parseGrade, parseScan, parseStatus, requireId, reviewResponses } from './scan-contract';
 import type { Candidate, Grade, Label, Scan } from './scan-contract';
+import { parseApplicationResults, parseAuthorize, parseFollowups, parseResultDetail, parseSettings } from './results-contract';
+import type { ApplicationResults, AuthorizeResponse, Followup, FollowupInput, ResultDetail, ResultSettings } from './results-contract';
 
 const IMAGE_PREFIX = 'data:image/jpeg;base64,';
 export function jpegDataUrl(base64: string | undefined): string {
@@ -27,8 +30,8 @@ export function createScanClient(apiUrl: string, token: () => Promise<string | n
     const timeout = setTimeout(abort, 45_000);
     try {
       const response = await fetcher(`${apiUrl.replace(/\/$/, '')}${path}`, {
-        ...options, signal: controller.signal,
-        headers: { authorization: `Bearer ${session}`, 'x-client': 'mobile', ...(options.body ? { 'content-type': 'application/json' } : {}), ...options.headers },
+        ...options, signal: controller.signal, credentials,
+        headers: { ...authHeaders(session), ...(options.body ? { 'content-type': 'application/json' } : {}), ...options.headers },
       });
       let body;
       try { body = await response.json(); }
@@ -80,6 +83,38 @@ export function createScanClient(apiUrl: string, token: () => Promise<string | n
       if (!Array.isArray(data)) throw new Error('Lista de resultados inválida.');
       const item = data.find((item) => item?.id === id);
       return item ? parseGrade(item) : null;
+    },
+    // Revisão e autorização de resultados: sempre online, sem cópia local.
+    async applicationResults(applicationId: string): Promise<ApplicationResults> {
+      return parseApplicationResults(await request(`/api/assessment-applications/${requireId(applicationId)}/results`));
+    },
+    async resultDetail(resultId: string): Promise<ResultDetail> {
+      const detail = parseResultDetail(await request(`/api/assessment-results/${requireId(resultId)}`));
+      if (detail.id !== resultId) throw new Error('A API retornou outro resultado.');
+      return detail;
+    },
+    async authorize(applicationId: string, items: { resultId: string; versionId: string }[], clientMutationId: string): Promise<AuthorizeResponse> {
+      return parseAuthorize(await request('/api/assessment-results/authorize', {
+        method: 'POST',
+        body: JSON.stringify({ applicationId: requireId(applicationId), clientMutationId: requireId(clientMutationId), items: items.map((item) => ({ resultId: requireId(item.resultId), versionId: requireId(item.versionId) })) }),
+      }));
+    },
+    async resultSettings(applicationId: string): Promise<ResultSettings> {
+      return parseSettings(await request(`/api/assessment-applications/${requireId(applicationId)}/result-settings`));
+    },
+    async saveResultSettings(applicationId: string, settings: Omit<ResultSettings, 'effectiveMinExpectedPercent' | 'recalculated'>): Promise<ResultSettings> {
+      return parseSettings(await request(`/api/assessment-applications/${requireId(applicationId)}/result-settings`, { method: 'PUT', body: JSON.stringify(settings) }));
+    },
+    async saveFollowup(resultId: string, input: FollowupInput, clientMutationId: string): Promise<Followup[]> {
+      const data = await request(`/api/assessment-results/${requireId(resultId)}/followups`, { method: 'POST', body: JSON.stringify({ ...input, clientMutationId: requireId(clientMutationId) }) }) as { history?: unknown };
+      return parseFollowups(data.history);
+    },
+    // Fonte da foto original do cartão, com a sessão no cabeçalho: a imagem
+    // não fica acessível por um link público.
+    async scanImage(scanId: string): Promise<{ uri: string; headers: Record<string, string> }> {
+      const session = await token();
+      if (!session) throw new ScanApiError('Sua sessão expirou. Volte e entre novamente.', false, 401);
+      return { uri: `${apiUrl.replace(/\/$/, '')}/api/card-scans/${requireId(scanId)}/image`, headers: authHeaders(session) };
     },
     async retry(id: string): Promise<void> {
       await request(`/api/card-scans/${requireId(id)}/retry`, { method: 'POST' });

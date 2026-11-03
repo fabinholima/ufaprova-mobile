@@ -43,7 +43,9 @@ export function createSynchronizer(store: OfflineStore, client: ScanClient, owne
       } catch (error) {
         const status = error instanceof ScanApiError ? error.status : undefined;
         const message = error instanceof Error ? error.message : 'Não foi possível sincronizar.';
-        const blocked = status != null && status >= 400 && status < 500 && status !== 401 && status !== 408 && status !== 429;
+        // 402: assinatura da instituição inativa. A foto continua na fila e o
+        // envio é retomado quando a assinatura for regularizada.
+        const blocked = status != null && status >= 400 && status < 500 && status !== 401 && status !== 402 && status !== 408 && status !== 429;
         const nextAttempt = now() + Math.min(300_000, 5_000 * 2 ** Math.min(operation.attempts, 6));
         await store.fail(owner, operation.id, blocked, message, nextAttempt);
         report.error = message;
