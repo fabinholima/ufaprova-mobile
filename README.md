@@ -23,6 +23,32 @@ npx expo start
 
 Configure `EXPO_PUBLIC_API_URL` para usar outra API. O projeto usa Expo SDK 58. Use uma versão compatível do Expo Go ou uma compilação de desenvolvimento. Permissões alteradas em `app.json` exigem recompilar o aplicativo instalado.
 
+## Versão web (PWA)
+
+O mesmo código é publicado como site estático em dois endereços:
+
+- `https://professor.ufaprova.com.br` abre a entrada do professor;
+- `https://aluno.ufaprova.com.br` abre direto a área do aluno.
+
+O subdomínio só escolhe a tela inicial; as permissões são da API. Uma conta de aluno que entra pela entrada do professor recebe a opção **Abrir área do aluno**, já conectada.
+
+```bash
+cp .env.example .env.local   # endereços locais
+npx expo start --web         # desenvolvimento: http://localhost:8081/?perfil=professor ou ?perfil=aluno
+npx expo export --platform web   # build de produção em dist/
+```
+
+No navegador:
+
+- A sessão fica no cookie HttpOnly da API. Nenhum token vai para localStorage, sessionStorage ou IndexedDB. Ao reabrir, a sessão é restaurada por `GET /api/auth/me`. A entrada Google troca o token pelo cookie em `POST /api/auth/session/cookie`.
+- Nada da escola é gravado no aparelho. Fotos de cartões, listas e rascunhos ficam só na memória da aba (`memory-store.ts`, com as mesmas regras do SQLite do aplicativo). O navegador avisa antes de fechar a aba com fotos ainda não enviadas.
+- O service worker (`public/sw.js`) guarda apenas os arquivos públicos do próprio site: página, scripts com hash e ícones. Ele não intercepta a API nem respostas `no-store`; notas e fotos nunca entram no cache.
+- A câmera exige HTTPS e a permissão do navegador.
+
+Os módulos com versão `.web.ts` (`platform-http`, `platform-store`, `host-profile`, `offline-runtime`) substituem os nativos só no build web. O aplicativo nativo continua usando SecureStore e SQLite.
+
+Publicação: `render.yaml` descreve o site estático `ufaprova-pwa`, com os cabeçalhos de segurança (CSP, Permissions-Policy, HSTS) e o cache. O arquivo não cria o serviço; os passos, o DNS e o domínio recomendado para a API (`api.ufaprova.com.br`) estão em `docs/pwa-subdominios.md` no repositório da API.
+
 ## Entrada com Google e senha
 
 O campo de senha oferece **Mostrar senha** e **Ocultar senha**. A senha começa oculta e volta a ficar oculta depois da entrada.

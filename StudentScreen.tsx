@@ -12,7 +12,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as SecureStore from "expo-secure-store";
+import { sessionStore as SecureStore } from "./platform-store";
+import { loginToken, persistSession } from "./platform-http";
 import StudentInviteScanner from "./StudentInviteScanner";
 import StudentPhotoScreen from "./StudentPhotoScreen";
 import StudentGrades from "./StudentGrades";
@@ -28,7 +29,9 @@ import type {
 } from "./student-api";
 import { startGoogleLogin, checkGoogleLogin } from "./google-login";
 import type { GoogleAttempt } from "./google-login";
-export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBack: () => void }) {
+// onTeacherArea: na web (aluno.<domínio>), leva à área do professor em vez de
+// voltar para a tela de entrada do aplicativo.
+export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUrl: string; onBack: () => void; onTeacherArea?: () => void }) {
   const [scanning, setScanning] = useState(false),
     [activities, setActivities] = useState<StudentActivity[]>([]),
     [profiles, setProfiles] = useState<StudentProfile[] | null>([]),
@@ -72,7 +75,8 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
     setActivities(own);
     setProfiles(profile);
   }
-  async function accept(value: string) {
+  async function accept(received: string) {
+    const value = await persistSession(apiUrl, received);
     const user = await verifyStudentSession(apiUrl, value);
     await SecureStore.setItemAsync(STUDENT_SESSION_KEY, JSON.stringify({ apiUrl, token: value }));
     setIdentity(user);
@@ -232,12 +236,13 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
                   "Enviamos um link de confirmação para seu e-mail. Confirme-o no navegador e entre aqui.",
                 );
               } else {
-                const result = await client<{ token: string }>("/api/auth/login", {
+                const result = await client<{ token?: string }>("/api/auth/login", {
                   email: email.trim(),
                   password,
                 });
-                if (!result?.token) throw Error("Sessão inválida.");
-                await accept(result.token);
+                const value = loginToken(result);
+                if (!value) throw Error("Sessão inválida.");
+                await accept(value);
               }
             })}
             {!attempt &&
@@ -294,8 +299,8 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
               },
               true,
             )}
-            <Pressable style={ui.secondary} onPress={onBack}>
-              <Text style={ui.buttonText}>Voltar para acesso de professor</Text>
+            <Pressable style={ui.secondary} onPress={onTeacherArea ?? onBack}>
+              <Text style={ui.buttonText}>{onTeacherArea ? "Sou professor · abrir área do professor" : "Voltar para acesso de professor"}</Text>
             </Pressable>
           </>
         ) : (

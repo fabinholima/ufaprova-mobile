@@ -1,3 +1,4 @@
+import { authHeaders, credentials } from "./platform-http";
 export type StudentIdentity = {
   role: "student";
   user: { id: string; displayName: string; email: string };
@@ -14,11 +15,8 @@ export function createStudentClient(apiUrl: string, token?: string) {
   return async function request<T>(path: string, input?: object): Promise<T> {
     const response = await fetch(`${apiUrl.replace(/\/$/, "")}${path}`, {
       method: input ? "POST" : "GET",
-      headers: {
-        "content-type": "application/json",
-        "x-client": "mobile",
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-      },
+      credentials,
+      headers: { "content-type": "application/json", ...authHeaders(token) },
       ...(input ? { body: JSON.stringify(input) } : {}),
       signal: AbortSignal.timeout(15000),
     });

@@ -9,7 +9,7 @@ async function setup(t, options = {}){
   await store.putCache(account.owner,'applications',[application]);
   await store.putCache(account.owner,'schools',[school]);await store.putCache(account.owner,'assessments',[assessment]);await store.putCache(account.owner,'classes',[schoolClass]);
   let network;let token=options.login ? null : JSON.stringify({...account,sessionToken:'token'});let uploads=0;
-  let openedUrl;let googleReady=false;
+  let openedUrl;let googleReady=false;const switched=[];
   const client={capabilities:async()=>{},upload:async(data,id)=>{uploads++;return {id,status:'completed'}},read:async id=>({id,status:'completed',submissionId:null,revision:null,score:null,maxScore:null,requiresManualReview:false,imageAvailable:true,candidates:[],detectedAnswers:[]}),catalog:async path=>path==='/api/educator-profile'?{schools:[school]}:path==='/api/classes'?[schoolClass]:path==='/api/assessment-applications'?[application]:[assessment]};
   const Capture=props=>React.createElement('Pressable',{onPress:()=>props.onConfirm({applicationId:props.applicationId,photo:{uri:'file:///photo.jpg',width:1000,height:2000},schoolId:props.school.id,assessmentId:props.assessment.id,classId:props.schoolClass.id,schoolName:props.school.name,assessmentTitle:props.assessment.title,className:props.schoolClass.name})},React.createElement('Text',null,'Confirmar foto de teste'));
   const Record=props=>React.createElement('Text',null,`Registro ${props.record.sheet.assessmentTitle}: ${props.record.remoteId?'enviado':'salvo localmente'}`);
@@ -19,8 +19,9 @@ async function setup(t, options = {}){
     'expo-crypto':{randomUUID:()=>'60000000-0000-4000-8000-000000000001'},
     './ResultsScreen':{default:props=>React.createElement('Text',null,`Resultados ${props.applicationId}`),__esModule:true},
     '@react-native-community/netinfo':{addEventListener:listener=>{network=listener;listener({isConnected:false,isInternetReachable:false});return()=>{}}},
-    'expo-secure-store':{getItemAsync:async()=>token,deleteItemAsync:async()=>{token=null},setItemAsync:async(_,v)=>{token=v}},
-    './offline-runtime':{ACCOUNT_KEY:'ufaprova.account',getStore:async()=>store,accountClient:()=>client,accountFromLogin:()=>account},
+    './host-profile':{hostProfile:options.hostProfile??null,switchProfile:profile=>{switched.push(profile)},warnBeforeLeaving:()=>()=>{}},
+    'expo-secure-store':{getItemAsync:async key=>key==='ufaprova.student.session.v1'?options.studentSession??null:token,deleteItemAsync:async()=>{token=null},setItemAsync:async(_,v)=>{token=v}},
+    './offline-runtime':{ACCOUNT_KEY:'ufaprova.account',PERSISTENT_STORE:true,getStore:async()=>store,accountClient:()=>client,accountFromLogin:()=>account},
     './prepare-image':{prepareImage:async()=> 'data:image/jpeg;base64,YQ=='},
     './google-login':{startGoogleLogin:async()=>({id:'attempt',token:'google-session',browserUrl:'https://ufaprova-api.onrender.com/api/auth/google/mobile/browser?ticket=test',expiresAt:Date.now()+600000}),checkGoogleLogin:async()=>googleReady},
     './CaptureScreen':{default:Capture,__esModule:true},'./RecordScreen':{default:Record,__esModule:true,localStatus:record=>record.remoteId?'Sincronizada':'Pendente'},
@@ -28,7 +29,7 @@ async function setup(t, options = {}){
   let component;await renderer.act(async()=>{component=renderer.create(React.createElement(App));});
   t.after(async()=>renderer.act(async()=>component.unmount()));
   async function press(label){const b=button(component,label);assert(b,`Missing button ${label}`);assert(!b.props.disabled,`Disabled ${label}`);await renderer.act(async()=>b.props.onPress());}
-  return {component,store,press,connect:async()=>renderer.act(async()=>network({isConnected:true,isInternetReachable:true})),get uploads(){return uploads},get openedUrl(){return openedUrl},googleReady:()=>{googleReady=true},get credentials(){return token}};
+  return {component,store,press,connect:async()=>renderer.act(async()=>network({isConnected:true,isInternetReachable:true})),get uploads(){return uploads},get openedUrl(){return openedUrl},googleReady:()=>{googleReady=true},get credentials(){return token},switched};
 }
 test('startup restores cached account and lists, and an offline capture survives navigation',async t=>{
   const h=await setup(t);assert(text(h.component.root).includes('Sem conexão'));assert(text(h.component.root).includes('Escola'));
@@ -83,4 +84,22 @@ test('result review opens for the selected application only with a connection',a
   assert(text(h.component.root).includes('exigem conexão'));
   await h.connect();await h.press('Revisar e autorizar resultados');
   assert(text(h.component.root).includes('Resultados 30000000-0000-4000-8000-000000000001'));
+});
+
+test('on the web the aluno subdomain opens the student area directly',async t=>{
+  const h=await setup(t,{login:true,hostProfile:'student'});
+  assert.match(text(h.component.root),/Painel do aluno/);
+});
+test('on the professor subdomain the student entry goes to the student site',async t=>{
+  const h=await setup(t,{login:true,hostProfile:'teacher'});
+  await h.press('Sou aluno · abrir área do aluno');
+  assert.deepEqual(h.switched,['student']);
+  assert.doesNotMatch(text(h.component.root),/Painel do aluno/);
+});
+test('a student session on the professor subdomain is sent to the student area, not mixed in',async t=>{
+  const h=await setup(t,{login:true,hostProfile:'teacher',studentSession:JSON.stringify({apiUrl:'https://ufaprova-api.onrender.com',token:'cookie-session'})});
+  assert.match(text(h.component.root),/Conta de aluno/);
+  assert.doesNotMatch(text(h.component.root),/Painel do aluno/);
+  await h.press('Abrir área do aluno');
+  assert.deepEqual(h.switched,['student']);
 });

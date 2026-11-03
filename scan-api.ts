@@ -1,3 +1,4 @@
+import { authHeaders, credentials } from './platform-http';
 import { parseSubmission } from './manual-contract';
 import type { ManualPayload, Submission } from './manual-contract';
 import { isPending, parseGrade, parseScan, parseStatus, requireId, reviewResponses } from './scan-contract';
@@ -29,8 +30,8 @@ export function createScanClient(apiUrl: string, token: () => Promise<string | n
     const timeout = setTimeout(abort, 45_000);
     try {
       const response = await fetcher(`${apiUrl.replace(/\/$/, '')}${path}`, {
-        ...options, signal: controller.signal,
-        headers: { authorization: `Bearer ${session}`, 'x-client': 'mobile', ...(options.body ? { 'content-type': 'application/json' } : {}), ...options.headers },
+        ...options, signal: controller.signal, credentials,
+        headers: { ...authHeaders(session), ...(options.body ? { 'content-type': 'application/json' } : {}), ...options.headers },
       });
       let body;
       try { body = await response.json(); }
@@ -113,7 +114,7 @@ export function createScanClient(apiUrl: string, token: () => Promise<string | n
     async scanImage(scanId: string): Promise<{ uri: string; headers: Record<string, string> }> {
       const session = await token();
       if (!session) throw new ScanApiError('Sua sessão expirou. Volte e entre novamente.', false, 401);
-      return { uri: `${apiUrl.replace(/\/$/, '')}/api/card-scans/${requireId(scanId)}/image`, headers: { authorization: `Bearer ${session}`, 'x-client': 'mobile' } };
+      return { uri: `${apiUrl.replace(/\/$/, '')}/api/card-scans/${requireId(scanId)}/image`, headers: authHeaders(session) };
     },
     async retry(id: string): Promise<void> {
       await request(`/api/card-scans/${requireId(id)}/retry`, { method: 'POST' });

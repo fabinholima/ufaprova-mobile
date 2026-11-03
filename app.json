@@ -23,6 +23,16 @@
     },
     "android": {
       "package": "br.com.ufaprova.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "UFA Prova",
+      "shortName": "UFA Prova",
+      "lang": "pt-BR",
+      "themeColor": "#1d4ed8",
+      "backgroundColor": "#f8fafc",
+      "favicon": "./public/favicon.png"
     }
   }
 }
