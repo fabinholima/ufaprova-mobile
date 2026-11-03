@@ -66,3 +66,13 @@ test('the service worker caches only the public app files of its own origin',asy
   assert.equal(await request('https://professor.ufaprova.com.br/turma',{mode:'navigate'}),true);
   assert.deepEqual(cached,['https://professor.ufaprova.com.br/_expo/static/js/web/AppEntry-abc.js'],'respostas no-store não entram no cache');
 });
+
+test('the previous API address counts as the same API only for the new default',()=>{
+  const {sameApi,API_URL}=load(path.join(__dirname,'../api-config.ts'));
+  assert.equal(API_URL,process.env.EXPO_PUBLIC_API_URL||'https://api.ufaprova.com.br');
+  assert.equal(sameApi('https://ufaprova-api.onrender.com','https://api.ufaprova.com.br/'),true);
+  assert.equal(sameApi('https://api.ufaprova.com.br/','https://api.ufaprova.com.br'),true);
+  assert.equal(sameApi('https://ufaprova-api.onrender.com','http://localhost:8788'),false);
+  assert.equal(sameApi('https://outra-api.example','https://api.ufaprova.com.br'),false);
+  assert.equal(sameApi(undefined,'https://api.ufaprova.com.br'),false);
+});

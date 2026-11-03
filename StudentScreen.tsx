@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { sessionStore as SecureStore } from "./platform-store";
 import { loginToken, persistSession } from "./platform-http";
+import { sameApi } from "./api-config";
 import StudentInviteScanner from "./StudentInviteScanner";
 import StudentPhotoScreen from "./StudentPhotoScreen";
 import StudentGrades from "./StudentGrades";
@@ -92,7 +93,7 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
       const saved = await SecureStore.getItemAsync(STUDENT_SESSION_KEY);
       if (saved) {
         const value = JSON.parse(saved);
-        if (active && value.apiUrl === apiUrl && typeof value.token === "string")
+        if (active && sameApi(value.apiUrl, apiUrl) && typeof value.token === "string")
           await accept(value.token);
       }
     });

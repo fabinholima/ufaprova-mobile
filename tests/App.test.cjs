@@ -1,6 +1,6 @@
 const test=require('node:test');const assert=require('node:assert/strict');const path=require('node:path');const {randomUUID}=require('node:crypto');const React=require('react');const renderer=require('react-test-renderer');const load=require('./load-typescript.cjs');const open=require('./sqlite-adapter.cjs');
 const {createOfflineStore}=load(path.join(__dirname,'../offline-store.ts'));global.IS_REACT_ACT_ENVIRONMENT=true;
-const account={owner:'teacher-owner',apiUrl:'https://ufaprova-api.onrender.com',userId:'u',institutionId:'i',email:'teacher@example.test',displayName:'Professor'};
+const account={owner:'teacher-owner',apiUrl:'https://api.ufaprova.com.br',userId:'u',institutionId:'i',email:'teacher@example.test',displayName:'Professor'};
 const school={id:'s',name:'Escola'},assessment={id:'10000000-0000-4000-8000-000000000001',title:'Prova'},schoolClass={id:'20000000-0000-4000-8000-000000000001',name:'Turma'};
 function text(node){return typeof node==='string'?node:node.children.map(text).join('');}function button(component,label){return component.root.findAllByType('Pressable').find(node=>text(node).includes(label));}
 async function setup(t, options = {}){
@@ -8,7 +8,7 @@ async function setup(t, options = {}){
   const application={id:'30000000-0000-4000-8000-000000000001',assessmentId:assessment.id,classId:schoolClass.id,title:assessment.title,className:schoolClass.name,status:'scheduled',students:1,completed:1,...options.application};
   await store.putCache(account.owner,'applications',[application]);
   await store.putCache(account.owner,'schools',[school]);await store.putCache(account.owner,'assessments',[assessment]);await store.putCache(account.owner,'classes',[schoolClass]);
-  let network;let token=options.login ? null : JSON.stringify({...account,sessionToken:'token'});let uploads=0;
+  let network;let token=options.login ? null : JSON.stringify({...(options.account??account),sessionToken:'token'});let uploads=0;
   let openedUrl;let googleReady=false;const switched=[];
   const client={capabilities:async()=>{},upload:async(data,id)=>{uploads++;return {id,status:'completed'}},read:async id=>({id,status:'completed',submissionId:null,revision:null,score:null,maxScore:null,requiresManualReview:false,imageAvailable:true,candidates:[],detectedAnswers:[]}),catalog:async path=>path==='/api/educator-profile'?{schools:[school]}:path==='/api/classes'?[schoolClass]:path==='/api/assessment-applications'?[application]:[assessment]};
   const Capture=props=>React.createElement('Pressable',{onPress:()=>props.onConfirm({applicationId:props.applicationId,photo:{uri:'file:///photo.jpg',width:1000,height:2000},schoolId:props.school.id,assessmentId:props.assessment.id,classId:props.schoolClass.id,schoolName:props.school.name,assessmentTitle:props.assessment.title,className:props.schoolClass.name})},React.createElement('Text',null,'Confirmar foto de teste'));
@@ -121,6 +121,15 @@ test('forgot password asks for the e-mail and gives the same answer whether or n
   const email=h.component.root.findAll(node=>node.type==='TextInput'&&node.props.accessibilityLabel==='E-mail')[0];
   await renderer.act(async()=>email.props.onChangeText(' professor@example.test '));
   await h.press('Esqueci minha senha');
-  assert.equal(calls[0].url,'https://ufaprova-api.onrender.com/api/auth/forgot-password');assert.deepEqual(calls[0].body,{email:'professor@example.test'});
+  assert.equal(calls[0].url,'https://api.ufaprova.com.br/api/auth/forgot-password');assert.deepEqual(calls[0].body,{email:'professor@example.test'});
   assert.match(text(h.component.root),/Se houver uma conta com este e-mail/);
+});
+
+test('after the default API address changes, queued photos and the session move to the new address',async t=>{
+  const h=await setup(t,{account:{...account,apiUrl:'https://ufaprova-api.onrender.com'}});
+  assert(text(h.component.root).includes('Escola'),'listas em cache continuam visíveis');
+  const saved=JSON.parse(h.credentials);
+  assert.equal(saved.apiUrl,'https://api.ufaprova.com.br');assert.equal(saved.owner,'https://api.ufaprova.com.br:u:i');assert.equal(saved.sessionToken,'token');
+  assert.equal((await h.store.cache('teacher-owner','schools')),null,'nada fica no dono antigo');
+  assert.equal((await h.store.cache(saved.owner,'schools'))[0].name,'Escola');
 });

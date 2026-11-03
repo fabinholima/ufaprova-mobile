@@ -62,6 +62,13 @@ export function createOfflineStore(db: Database, uuid: () => string, now = Date.
     async claim(owner: string, id: string): Promise<boolean> { return (await db.runAsync("UPDATE outbox SET state='sending',attempts=attempts+1 WHERE owner=? AND id=? AND state='pending' AND next_attempt<=?", owner, id, now())).changes === 1; },
     async fail(owner: string, id: string, blocked: boolean, error: string, nextAttempt: number) { await db.runAsync("UPDATE outbox SET state=?,error=?,next_attempt=? WHERE owner=? AND id=?", blocked ? 'blocked' : 'pending', error, nextAttempt, owner, id); },
     async retryBlocked(owner: string, id: string) { await db.runAsync("UPDATE outbox SET state='pending',error=NULL,next_attempt=0 WHERE owner=? AND id=? AND state='blocked' AND kind='upload'", owner, id); },
+    // Troca do endereço da API: fotos, fila, listas e rascunhos passam ao novo dono.
+    async renameOwner(from: string, to: string) {
+      if (from === to) return;
+      await db.withExclusiveTransactionAsync(async tx => {
+        for (const table of ['mobile_cache', 'local_records', 'outbox', 'local_drafts']) await tx.runAsync(`UPDATE ${table} SET owner=? WHERE owner=?`, to, from);
+      });
+    },
     async update(owner: string, id: string, changes: Partial<Pick<LocalRecord, 'remoteId' | 'scan' | 'grade' | 'submission'>>) {
       const columns = { remoteId: 'remote_id', scan: 'scan', grade: 'grade', submission: 'submission' };
       const keys = Object.keys(changes) as (keyof typeof columns)[];
@@ -81,7 +88,7 @@ export function createOfflineStore(db: Database, uuid: () => string, now = Date.
     },
   };
   let tail: Promise<unknown> = Promise.resolve();
-  const writers = new Set(['initialize', 'putCache', 'create', 'enqueue', 'saveDraft', 'claim', 'fail', 'retryBlocked', 'update', 'acknowledge']);
+  const writers = new Set(['initialize', 'putCache', 'create', 'enqueue', 'saveDraft', 'claim', 'fail', 'retryBlocked', 'renameOwner', 'update', 'acknowledge']);
   return new Proxy(methods, { get(target, key) {
     const value = Reflect.get(target, key);
     if (!writers.has(String(key))) return value;
