@@ -1,7 +1,8 @@
 import { authHeaders, credentials } from "./platform-http";
 export type StudentIdentity = {
   role: "student";
-  user: { id: string; displayName: string; email: string };
+  // Conta criada pelo código pessoal não tem e-mail.
+  user: { id: string; displayName: string; email: string | null };
 };
 export type StudentRequest = {
   id: string;
@@ -113,6 +114,8 @@ export type StudentCodeMatch = {
   schoolName: string;
   classes: { className: string }[];
 };
+// Primeiro acesso pelo código: passwordReset indica conta já existente (senha nova).
+export type FirstAccessMatch = StudentCodeMatch & { passwordReset: boolean };
 export type StudentCodeClaim = {
   studentId: string;
   classes: { className: string; schoolName: string }[];
