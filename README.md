@@ -21,7 +21,7 @@ npm test
 npx expo start
 ```
 
-Configure `EXPO_PUBLIC_API_URL` para usar outra API. O projeto usa Expo SDK 58. Use uma versão compatível do Expo Go ou uma compilação de desenvolvimento. Permissões alteradas em `app.json` exigem recompilar o aplicativo instalado.
+A API padrão é `https://api.ufaprova.com.br`. Configure `EXPO_PUBLIC_API_URL` para usar outra API. Contas, fotos na fila e listas salvas com o endereço anterior (`https://ufaprova-api.onrender.com`, a mesma API) passam para o novo endereço ao abrir o app, sem novo login. O projeto usa Expo SDK 58. Use uma versão compatível do Expo Go ou uma compilação de desenvolvimento. Permissões alteradas em `app.json` exigem recompilar o aplicativo instalado.
 
 ## Versão web (PWA)
 

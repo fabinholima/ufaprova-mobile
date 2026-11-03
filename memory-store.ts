@@ -64,6 +64,14 @@ export function createMemoryStore(uuid: () => string, now = Date.now): OfflineSt
       const row = outbox.get(id);
       if (row?.owner === owner && row.state === 'blocked' && row.kind === 'upload') Object.assign(row, { state: 'pending', error: null, nextAttempt: 0 });
     },
+    async renameOwner(from: string, to: string) {
+      // Na web nada sobrevive ao recarregar; mantido pela mesma interface.
+      for (const row of [...records.values(), ...outbox.values()]) if (row.owner === from) row.owner = to;
+      for (const map of [cached, drafts]) for (const [name, value] of [...map]) {
+        const parts = JSON.parse(name) as string[];
+        if (parts[0] === from) { map.delete(name); map.set(key(to, ...parts.slice(1)), value); }
+      }
+    },
     async update(owner: string, id: string, changes: Changes) { const row = owned(owner, id); if (row) apply(row, changes); },
     async acknowledge(owner: string, id: string, recordId: string, changes: Changes, clearDraftKind?: string) {
       const row = owned(owner, recordId);

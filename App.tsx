@@ -4,7 +4,8 @@ import NetInfo from '@react-native-community/netinfo';
 import * as Crypto from 'expo-crypto';
 import { sessionStore as SecureStore } from './platform-store';
 import { authHeaders, credentials, endSession, loginToken, persistSession } from './platform-http';
-import { API_URL, PORTAL_URL } from './api-config';
+import { API_URL, PORTAL_URL, sameApi } from './api-config';
+import { moveAccount } from './account';
 import { hostProfile, switchProfile, warnBeforeLeaving } from './host-profile';
 import EducatorRegistrationScreen from './EducatorRegistrationScreen';
 import StudentScreen from './StudentScreen';
@@ -34,7 +35,7 @@ type SchoolClass = { id: string; name: string; grade?: string; schoolYear?: numb
 export default function App() {
   const [educatorRegistration,setEducatorRegistration]=useState(false);
   const [studentAccess,setStudentAccess]=useState(false);
-  useEffect(()=>{void SecureStore.getItemAsync(STUDENT_SESSION_KEY).then(raw=>{if(raw){const value=JSON.parse(raw);if(typeof value.token==='string'&&value.apiUrl===API_URL)setStudentAccess(true);}}).catch(()=>{});},[]);
+  useEffect(()=>{void SecureStore.getItemAsync(STUDENT_SESSION_KEY).then(raw=>{if(raw){const value=JSON.parse(raw);if(typeof value.token==='string'&&sameApi(value.apiUrl))setStudentAccess(true);}}).catch(()=>{});},[]);
   const [store, setStore] = useState<OfflineStore | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const ownerRef = useRef<string | null>(null);
@@ -93,8 +94,17 @@ export default function App() {
       const storage = await getStore(); setStore(storage);
       const raw = await SecureStore.getItemAsync(ACCOUNT_KEY);
       if (raw) {
-        const saved: Account = JSON.parse(raw);
-        if (saved.apiUrl === API_URL.replace(/\/$/, '')) await activate(saved, storage);
+        let saved: Account & { sessionToken?: string } = JSON.parse(raw);
+        if (sameApi(saved.apiUrl)) {
+          if (saved.apiUrl !== API_URL.replace(/\/$/, '')) {
+            const moved = moveAccount(saved, API_URL);
+            await storage.renameOwner(saved.owner, moved.owner);
+            saved = { ...saved, ...moved };
+            await SecureStore.setItemAsync(ACCOUNT_KEY, JSON.stringify(saved));
+          }
+          const { sessionToken: _token, ...account } = saved;
+          await activate(account, storage);
+        }
       }
     } catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível abrir os dados do aparelho.'); }
     finally { setBooting(false); }

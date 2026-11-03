@@ -28,6 +28,14 @@ test('photos, context, drafts and immutable operation IDs survive a real SQLite 
 
 // O navegador usa o armazenamento em memória com as mesmas regras do SQLite.
 for(const kind of ['SQLite','memória']){
+test(`renaming the owner moves photos, queue, lists and drafts together (${kind})`,async t=>{
+  const {store}=await setup(t,kind);const id=await store.create('old',sheet,image);await store.putCache('old','schools',['Escola']);await store.saveDraft('old',id,'manual',{points:{1:'1'}});await store.create('other',sheet,image);
+  await store.renameOwner('old','new');
+  assert.equal((await store.list('old')).length,0);assert.equal((await store.operations('old')).length,0);
+  assert.equal((await store.list('new'))[0].id,id);assert.equal((await store.operations('new'))[0].recordId,id);
+  assert.deepEqual(await store.cache('new','schools'),['Escola']);assert.deepEqual((await store.draft('new',id,'manual')).points,{1:'1'});
+  assert.equal((await store.list('other')).length,1,'outras contas não mudam');
+});
 test(`records, cached lists, drafts and queued operations are isolated by account (${kind})`,async t=>{
   const {store}=await setup(t,kind);const id=await store.create('teacher-a',sheet,image);await store.putCache('teacher-a','schools',['private']);await store.saveDraft('teacher-a',id,'manual',{points:{1:'1'}});
   assert.equal((await store.list('teacher-b')).length,0);assert.equal((await store.operations('teacher-b')).length,0);assert.equal(await store.get('teacher-b',id),null);assert.equal(await store.cache('teacher-b','schools'),null);assert.equal(await store.draft('teacher-b',id,'manual'),null);
