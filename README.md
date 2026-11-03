@@ -132,3 +132,26 @@ Na entrada, use **Criar conta de professor/coordenador**. Escolha o perfil, info
 5. Leituras incompletas, respostas em branco ou marcações duvidosas exigem revisão e confirmação do professor. O resultado definitivo vem do servidor. Depois, use **Capturar próxima folha** para continuar a mesma aplicação.
 
 O envio guarda a aplicação escolhida; o servidor bloqueia QR de outra aplicação antes de gerar nota. A revisão também não pode trocar esse vínculo. Dados de versões anteriores do aplicativo permanecem no aparelho; novas capturas exigem aplicação válida e a atualização da API/worker com `072_mobile_scan_application.sql`.
+
+## Revisão e autorização dos resultados
+
+A correção gera apenas um resultado provisório. O aluno só vê a nota depois
+que o professor autoriza o lançamento (API: `docs/resultados-publicacao.md`).
+
+1. Em **Selecione a aplicação da prova**, escolha a aplicação e toque em **Revisar e autorizar resultados**. A tela exige conexão; os resultados não ficam guardados no aparelho.
+2. A lista mostra cada aluno com:
+   - o estado da leitura e da publicação;
+   - acertos, erros, questões em branco, inválidas e anuladas, e o percentual;
+   - pendências: leitura duvidosa, discursiva sem nota ou outro cartão do mesmo aluno aguardando decisão;
+   - um aviso quando o resultado fica abaixo do mínimo esperado.
+3. **Detalhes** mostra, por questão, o que foi lido e o gabarito, além da foto original (carregada com a sessão, sem link público), das alterações e das publicações. Cartões em revisão enviados por este aparelho abrem em **Revisar leitura deste cartão**; os demais devem ser revisados no portal.
+4. Selecione os resultados prontos (um por um ou **Selecionar todos os prontos**) e toque em **Autorizar lançamento**. A tela de confirmação lista os alunos afetados. A publicação só acontece em **Confirmar e publicar**.
+5. O servidor publica apenas a versão que você conferiu. Se a leitura mudou depois, o item volta como alterado e precisa ser conferido de novo. Repetir o envio após uma falha de conexão não gera outro lançamento.
+6. Em **Regras da avaliação**, ajuste:
+   - o mínimo esperado;
+   - o que o aluno vê em cada questão;
+   - as questões anuladas, com a forma de pontuação.
+
+   Alterar anulações recalcula a aplicação inteira e pede confirmação. Os resultados já publicados continuam visíveis na versão anterior até uma nova autorização.
+
+Com a assinatura da instituição inativa, novos envios de fotos aguardam na fila (resposta 402), sem perder a captura.

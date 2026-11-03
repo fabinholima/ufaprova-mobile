@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Linking, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
+import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import EducatorRegistrationScreen from './EducatorRegistrationScreen';
 import StudentScreen from './StudentScreen';
@@ -8,6 +9,7 @@ import {STUDENT_SESSION_KEY} from './student-api';
 import CaptureScreen from './CaptureScreen';
 import type { CapturedSheet } from './CaptureScreen';
 import RecordScreen, { localStatus } from './RecordScreen';
+import ResultsScreen from './ResultsScreen';
 import { ACCOUNT_KEY, accountClient, accountFromLogin, getStore } from './offline-runtime';
 import type { Account } from './offline-runtime';
 import type { LocalRecord, OfflineStore, Operation } from './offline-store';
@@ -20,7 +22,7 @@ import { ui } from './ui-styles';
 import { startGoogleLogin, checkGoogleLogin } from './google-login';
 import type { GoogleAttempt } from './google-login';
 
-type Screen = 'login' | 'home' | 'assessments' | 'scan' | 'records' | 'record';
+type Screen = 'login' | 'home' | 'assessments' | 'scan' | 'records' | 'record' | 'results';
 type School = { id: string; name: string; city?: string; state?: string };
 type Assessment = { id: string; title: string; subject?: string; grade?: string };
 type SchoolClass = { id: string; name: string; grade?: string; schoolYear?: number };
@@ -292,8 +294,12 @@ export default function App() {
         {!applications.length && <><Text style={ui.text}>Nenhuma aplicação disponível. No portal, abra Turmas e alunos, agende a avaliação para a turma e gere os cartões individuais.</Text><Pressable style={ui.secondary} onPress={()=>void Linking.openURL(`${process.env.EXPO_PUBLIC_PORTAL_URL || 'https://ufaprova-frontend.onrender.com'}/portal`).catch(()=>setError('Não foi possível abrir o portal.'))}><Text style={ui.buttonText}>Abrir portal para preparar os cartões</Text></Pressable></>}
         {applications.map(item=><Pressable key={item.id} accessibilityRole="radio" accessibilityState={{selected:selectedApplication?.id===item.id}} style={[ui.card,selectedApplication?.id===item.id&&ui.selected]} onPress={()=>{setSelectedApplication(item);setAssessment({id:item.assessmentId,title:item.title});setSchoolClass({id:item.classId,name:item.className});}}><Text style={ui.cardTitle}>{item.title}</Text><Text style={ui.text}>{item.className} · {item.students} alunos</Text></Pressable>)}
         <Pressable disabled={!selectedApplication||loading} style={[ui.primary,(!selectedApplication||loading)&&ui.disabled]} onPress={()=>setScreen('scan')}><Text style={ui.primaryText}>Continuar para captura</Text></Pressable>
+        <Pressable disabled={!selectedApplication||!connected} style={[ui.secondary,(!selectedApplication||!connected)&&ui.disabled]} onPress={()=>setScreen('results')}><Text style={ui.buttonText}>Revisar e autorizar resultados</Text></Pressable>
+        {!!selectedApplication&&!connected&&<Text style={ui.small}>A revisão e a autorização dos resultados exigem conexão.</Text>}
         <Pressable style={ui.secondary} onPress={() => setScreen('home')}><Text style={ui.buttonText}>Trocar escola</Text></Pressable>
-      </> : screen === 'scan' && school && assessment && schoolClass ? <CaptureScreen applicationId={selectedApplication?.id} school={school} assessment={assessment} schoolClass={schoolClass} onConfirm={saveCapture} onBack={() => setScreen('assessments')} /> : screen === 'record' && selectedRecord && store ? <RecordScreen key={selectedRecord.id} record={selectedRecord} operations={operations} store={store} connected={connected} onSaved={reload} onRefresh={refreshSelected} onRetry={retrySelected} onNext={() => nextCapture(selectedRecord)} onBack={() => setScreen('records')} /> : <>
+      </> : screen === 'results' && selectedApplication && client ? <ResultsScreen key={selectedApplication.id} client={client} applicationId={selectedApplication.id} connected={connected} newId={Crypto.randomUUID}
+          onReviewScan={scanId=>{const local=records.find(record=>record.remoteId===scanId);if(!local)return false;setRecordId(local.id);setScreen('record');return true;}} onBack={()=>setScreen('assessments')} />
+      : screen === 'scan' && school && assessment && schoolClass ? <CaptureScreen applicationId={selectedApplication?.id} school={school} assessment={assessment} schoolClass={schoolClass} onConfirm={saveCapture} onBack={() => setScreen('assessments')} /> : screen === 'record' && selectedRecord && store ? <RecordScreen key={selectedRecord.id} record={selectedRecord} operations={operations} store={store} connected={connected} onSaved={reload} onRefresh={refreshSelected} onRetry={retrySelected} onNext={() => nextCapture(selectedRecord)} onBack={() => setScreen('records')} /> : <>
         <Text style={ui.title}>Digitalizações salvas</Text>
         {!records.length && <Text style={ui.text}>As folhas capturadas aparecerão aqui, mesmo sem conexão.</Text>}
         {records.map(record => <Pressable key={record.id} style={ui.card} onPress={() => { setRecordId(record.id); setScreen('record'); }}><Text style={ui.cardTitle}>{record.sheet.assessmentTitle} • {record.sheet.className}</Text><Text style={ui.small}>{localStatus(record, operations)}</Text><Text style={ui.small}>{record.sheet.schoolName}</Text></Pressable>)}

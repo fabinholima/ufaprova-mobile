@@ -16,6 +16,8 @@ async function setup(t, options = {}){
   const {default:App}=load(path.join(__dirname,'../App.tsx'),{
     './StudentScreen':()=>React.createElement('Text',null,'Painel do aluno'),
     'react-native':{ActivityIndicator:'ActivityIndicator',AppState:{currentState:'active',addEventListener:()=>({remove(){}})},Linking:{openURL:async url=>{openedUrl=url}},Pressable:'Pressable',SafeAreaView:'SafeAreaView',ScrollView:'ScrollView',Text:'Text',TextInput:'TextInput',View:'View',StyleSheet:{create:x=>x}},
+    'expo-crypto':{randomUUID:()=>'60000000-0000-4000-8000-000000000001'},
+    './ResultsScreen':{default:props=>React.createElement('Text',null,`Resultados ${props.applicationId}`),__esModule:true},
     '@react-native-community/netinfo':{addEventListener:listener=>{network=listener;listener({isConnected:false,isInternetReachable:false});return()=>{}}},
     'expo-secure-store':{getItemAsync:async()=>token,deleteItemAsync:async()=>{token=null},setItemAsync:async(_,v)=>{token=v}},
     './offline-runtime':{ACCOUNT_KEY:'ufaprova.account',getStore:async()=>store,accountClient:()=>client,accountFromLogin:()=>account},
@@ -74,4 +76,11 @@ test('native coordinator signup returns to login with the email filled and never
  const h=await setup(t,{login:true});await h.press('Criar conta de professor/coordenador');await h.press('Coordenador');await h.press('Ensino Médio');
  for(const [label,value] of [['Nome completo','Coordenador Teste'],['E-mail do professor ou coordenador','coord@example.test'],['CPF','12345678909'],['Senha para nova conta','TestPassword123!'],['Confirmar senha','TestPassword123!'],['Nome da escola','Escola Teste'],['Endereço da escola','Rua Teste, 1'],['Cidade da escola','Campo Grande'],['Estado da escola (UF)','MS']])await renderer.act(async()=>h.component.root.findAllByType('TextInput').find(n=>n.props.accessibilityLabel===label).props.onChangeText(value));
  await h.press('Criar minha conta');assert.equal(calls,1);assert.equal(h.credentials,null);assert(text(h.component.root).includes('Confirme o link enviado ao seu e-mail'));assert.equal(h.component.root.findAllByType('TextInput').find(n=>n.props.accessibilityLabel==='E-mail').props.value,'coord@example.test');
+});
+test('result review opens for the selected application only with a connection',async t=>{
+  const h=await setup(t);await h.press('Corrigir cartões de respostas');await h.press('Prova');
+  assert.equal(button(h.component,'Revisar e autorizar resultados').props.disabled,true);
+  assert(text(h.component.root).includes('exigem conexão'));
+  await h.connect();await h.press('Revisar e autorizar resultados');
+  assert(text(h.component.root).includes('Resultados 30000000-0000-4000-8000-000000000001'));
 });
