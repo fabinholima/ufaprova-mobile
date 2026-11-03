@@ -166,5 +166,13 @@ que o professor autoriza o lançamento (API: `docs/resultados-publicacao.md`).
    - as questões anuladas, com a forma de pontuação.
 
    Alterar anulações recalcula a aplicação inteira e pede confirmação. Os resultados já publicados continuam visíveis na versão anterior até uma nova autorização.
+7. Baixo rendimento não impede a publicação. Depois de publicar, a tela informa quantos resultados ficaram abaixo do mínimo esperado, e a lista marca cada um como **justificativa pendente** até haver um registro com motivo.
+8. Em **Detalhes** › **Registrar justificativa** (ou **Atualizar acompanhamento**), escolha:
+   - os motivos observados, que começam todos desmarcados (**Outro motivo** exige descrição);
+   - as ações pedagógicas;
+   - uma observação interna, que o aluno nunca vê;
+   - uma orientação ao aluno, que ele só vê se você marcar **Publicar orientação ao aluno**.
+
+   Cada atualização cria uma nova entrada; o histórico anterior continua visível no detalhe.
 
 Com a assinatura da instituição inativa, novos envios de fotos aguardam na fila (resposta 402), sem perder a captura.

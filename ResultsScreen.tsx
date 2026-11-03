@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, Text, TextInput, View } from 'react-native';
 import {
-  ITEM_LABEL, OUTCOME_LABEL, PROCESSING_LABEL, PUBLICATION_LABEL, RELEASE_LABEL,
-  authorizable, countLine, parseQuestionList, pendingLine,
+  ACTION_LABEL, ITEM_LABEL, OUTCOME_LABEL, PROCESSING_LABEL, PUBLICATION_LABEL, REASON_LABEL, RELEASE_LABEL,
+  authorizable, countLine, followupPending, parseQuestionList, pendingLine,
 } from './results-contract';
+import FollowupForm from './FollowupForm';
 import type { AnnulledPolicy, ApplicationResults, AuthorizeResponse, ReleasePolicy, ResultDetail, StudentResult } from './results-contract';
 import type { ScanClient } from './scan-api';
 import { ui } from './ui-styles';
 
-type Client = Pick<ScanClient, 'applicationResults' | 'resultDetail' | 'authorize' | 'saveResultSettings' | 'scanImage'>;
-type Mode = 'list' | 'confirm' | 'detail' | 'settings';
+type Client = Pick<ScanClient, 'applicationResults' | 'resultDetail' | 'authorize' | 'saveResultSettings' | 'scanImage' | 'saveFollowup'>;
+type Mode = 'list' | 'confirm' | 'detail' | 'settings' | 'followup';
 
 // Revisão e autorização do lançamento. Somente com conexão: os resultados
 // não são guardados no aparelho.
@@ -30,14 +31,15 @@ export default function ResultsScreen({ client, applicationId, connected, newId,
   // de conexão não gera outro lançamento.
   const batch = useRef<{ key: string; id: string } | null>(null);
 
-  const load = useCallback(async () => {
-    if (!connected) { setError('Conecte-se para consultar e autorizar resultados.'); return; }
+  const load = useCallback(async (): Promise<ApplicationResults | null> => {
+    if (!connected) { setError('Conecte-se para consultar e autorizar resultados.'); return null; }
     setBusy(true); setError('');
     try {
       const next = await client.applicationResults(applicationId);
       setData(next);
       setSelected((current) => new Set([...current].filter((id) => next.students.some((s) => s.resultId === id && authorizable(s)))));
-    } catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível carregar os resultados.'); }
+      return next;
+    } catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível carregar os resultados.'); return null; }
     finally { setBusy(false); }
   }, [client, applicationId, connected]);
   useEffect(() => { void load(); }, [load]);
@@ -57,7 +59,11 @@ export default function ResultsScreen({ client, applicationId, connected, newId,
       const response = await client.authorize(data.application.id, items, batch.current.id);
       batch.current = null;
       setOutcome(response); setSelected(new Set()); setView('list');
-      await load();
+      const next = await load();
+      // Baixo rendimento abre a opção de justificar, sem bloquear a publicação.
+      const published = new Set(response.items.filter((item) => item.outcome === 'published').map((item) => item.resultId));
+      const low = next?.students.filter((s) => s.resultId && published.has(s.resultId) && followupPending(s)).length ?? 0;
+      setNotice(low ? `${low} resultado(s) publicado(s) abaixo do mínimo esperado. Registre a justificativa agora ou depois, em Detalhes.` : '');
     } catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível autorizar.'); }
     finally { setBusy(false); }
   }
@@ -65,7 +71,7 @@ export default function ResultsScreen({ client, applicationId, connected, newId,
   async function openDetail(student: StudentResult) {
     if (!student.resultId) return;
     setBusy(true); setError(''); setPhoto(null);
-    try { setDetail(await client.resultDetail(student.resultId)); setView('detail'); }
+    try { setDetail(await client.resultDetail(student.resultId)); setNotice(''); setView('detail'); }
     catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível abrir o resultado.'); }
     finally { setBusy(false); }
   }
@@ -87,6 +93,15 @@ export default function ResultsScreen({ client, applicationId, connected, newId,
     </Pressable>
     <Pressable style={ui.secondary} disabled={busy} onPress={() => setView('list')}><Text style={ui.buttonText}>Voltar sem publicar</Text></Pressable>
   </View>;
+
+  if (view === 'followup' && detail) return <FollowupForm current={detail.followups[0] ?? null} connected={connected} newId={newId}
+    onCancel={() => setView('detail')}
+    onSave={async (input, mutationId) => {
+      const followups = await client.saveFollowup(detail.id, input, mutationId);
+      setDetail({ ...detail, followups }); setView('detail');
+      setNotice(input.reasons.length ? 'Justificativa registrada.' : 'Acompanhamento salvo como pendente.');
+      await load();
+    }} />;
 
   if (view === 'detail' && detail) {
     const current = detail.versions.find((v) => v.id === detail.currentVersionId) ?? detail.versions[0];
@@ -114,6 +129,23 @@ export default function ResultsScreen({ client, applicationId, connected, newId,
         <Text style={ui.buttonText}>Ver foto do cartão ({s.status === 'review' ? 'em revisão' : s.status === 'completed' ? 'lido' : s.status}){s.duplicateOfScanId ? ' · duplicado' : ''}</Text>
       </Pressable>)}
       {photo && <Image source={photo} style={ui.preview} resizeMode="contain" accessibilityLabel="Foto original do cartão" />}
+      {(detail.belowExpected || detail.followups.length > 0) && <>
+        <Text style={ui.title}>Acompanhamento pedagógico</Text>
+        {detail.belowExpected && <Text style={ui.text}>Abaixo do mínimo esperado{detail.minExpectedPercent != null ? ` (${detail.minExpectedPercent}%)` : ''}.{detail.followups[0]?.status === 'justified' ? '' : ' Justificativa pendente.'}</Text>}
+        {!!notice && <Text accessibilityLiveRegion="polite" style={ui.success}>{notice}</Text>}
+        {detail.followups.map((f, index) => <View key={f.id} style={[ui.card, index === 0 && ui.selected]}>
+          <Text style={ui.cardTitle}>{index === 0 ? 'Situação atual' : 'Registro anterior'} · {f.status === 'justified' ? 'Justificado' : 'Pendente'}</Text>
+          <Text style={ui.small}>{new Date(f.createdAt).toLocaleString('pt-BR')}{f.createdByName ? ` · ${f.createdByName}` : ''}{f.resultVersion ? ` · versão ${f.resultVersion}` : ''}</Text>
+          {f.reasons.length > 0 && <Text style={ui.small}>Motivos: {f.reasons.map((r) => r === 'other' && f.otherReason ? `${REASON_LABEL.other}: ${f.otherReason}` : REASON_LABEL[r]).join('; ')}</Text>}
+          {f.actions.length > 0 && <Text style={ui.small}>Ações: {f.actions.map((a) => ACTION_LABEL[a]).join('; ')}</Text>}
+          {!!f.internalNote && <Text style={ui.small}>Observação interna: {f.internalNote}</Text>}
+          {!!f.studentGuidance && <Text style={ui.small}>Orientação {f.studentGuidancePublished ? 'publicada' : 'não publicada'}: {f.studentGuidance}</Text>}
+        </View>)}
+        <Pressable accessibilityRole="button" disabled={!connected} style={[ui.secondary, !connected && ui.disabled]} onPress={() => { setNotice(''); setView('followup'); }}>
+          <Text style={ui.buttonText}>{detail.followups.length ? 'Atualizar acompanhamento' : 'Registrar justificativa'}</Text>
+        </Pressable>
+      </>}
+      {!detail.belowExpected && !detail.followups.length && <Pressable style={ui.secondary} disabled={!connected} onPress={() => { setNotice(''); setView('followup'); }}><Text style={ui.buttonText}>Registrar acompanhamento</Text></Pressable>}
       {detail.changes.length > 0 && <>
         <Text style={ui.title}>Alterações registradas</Text>
         {detail.changes.map((c, index) => <Text key={index} style={ui.small}>Questão {c.questionNumber}: {ITEM_LABEL[c.previousStatus ?? ''] ?? '—'} → {ITEM_LABEL[c.newStatus] ?? c.newStatus} (versão {c.toVersion}{c.changedByName ? `, ${c.changedByName}` : ''})</Text>)}
@@ -130,11 +162,12 @@ export default function ResultsScreen({ client, applicationId, connected, newId,
     onDone={async (message) => { setView('list'); setError(''); setOutcome(null); setNotice(message ?? ''); await load(); }} />;
 
   const pendingCount = students.filter((s) => s.resultId && !s.publishable).length;
+  const lowPending = students.filter(followupPending).length;
   const republish = students.filter((s) => s.publicationStatus === 'republish_required').length;
   return <View>
     {header}
     {busy && !data && <ActivityIndicator accessibilityLabel="Carregando resultados" />}
-    {data && <Text style={ui.small}>{ready.length} pronto(s) para autorizar · {pendingCount} com pendência · {students.filter((s) => s.published).length} publicado(s){republish ? ` · ${republish} precisa(m) de nova autorização` : ''}</Text>}
+    {data && <Text style={ui.small}>{ready.length} pronto(s) para autorizar · {pendingCount} com pendência · {students.filter((s) => s.published).length} publicado(s){republish ? ` · ${republish} precisa(m) de nova autorização` : ''}{lowPending ? ` · ${lowPending} justificativa(s) pendente(s)` : ''}</Text>}
     {outcome && <Text accessibilityLiveRegion="polite" style={ui.success}>{summarizeOutcome(outcome)}</Text>}
     {!!notice && <Text accessibilityLiveRegion="polite" style={ui.success}>{notice}</Text>}
     {!!error && <Text style={ui.error}>{error}</Text>}
@@ -149,7 +182,7 @@ export default function ResultsScreen({ client, applicationId, connected, newId,
         <Text style={ui.small}>{PROCESSING_LABEL[s.processingStatus]} · {PUBLICATION_LABEL[s.publicationStatus]}</Text>
         {s.counts && <Text style={ui.small}>{countLine(s.counts, s.percent)}</Text>}
         {pending && <Text style={ui.error}>{pending}</Text>}
-        {s.belowExpected && <Text style={ui.small}>Abaixo do mínimo esperado{s.followupStatus === 'justified' ? ' · acompanhamento registrado' : ''}</Text>}
+        {s.belowExpected && <Text style={followupPending(s) ? ui.error : ui.small}>Abaixo do mínimo esperado · {followupPending(s) ? 'justificativa pendente' : 'justificativa registrada'}</Text>}
         <View style={ui.options}>
           {canSelect && <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: selected.has(s.resultId!) }} style={ui.option} onPress={() => toggle(s.resultId!)}>
             <Text style={ui.buttonText}>{selected.has(s.resultId!) ? '✓ Selecionado' : 'Selecionar'}</Text>

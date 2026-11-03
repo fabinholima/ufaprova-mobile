@@ -45,7 +45,42 @@ export type ResultDetail = {
   changes: { questionNumber: number; previousLabels: string[]; newLabels: string[]; previousStatus: string | null; newStatus: string; changedAt: string; changedByName: string | null; toVersion: number }[];
   publications: { id: string; version: number; authorizerName: string; authorizedAt: string; legacy: boolean; supersededAt: string | null }[];
   scans: { id: string; status: string; createdAt: string; imageAvailable: boolean; duplicateOfScanId: string | null }[];
+  belowExpected: boolean; minExpectedPercent: number | null; followups: Followup[];
 };
+export type LowPerformanceReason = 'content_comprehension' | 'reading_interpretation' | 'attendance' | 'prior_content' | 'incomplete_assessment' | 'application_incident' | 'other';
+export type PedagogicalAction = 'content_review' | 'targeted_exercises' | 'individual_support' | 'recovery' | 'new_assessment';
+export type Followup = {
+  id: string; status: 'pending' | 'justified'; reasons: LowPerformanceReason[]; otherReason: string | null; actions: PedagogicalAction[];
+  internalNote: string | null; studentGuidance: string | null; studentGuidancePublished: boolean;
+  createdAt: string; createdByName: string | null; resultVersion: number | null;
+};
+export type FollowupInput = {
+  reasons: LowPerformanceReason[]; otherReason?: string; actions: PedagogicalAction[];
+  internalNote?: string; studentGuidance?: string; publishGuidance: boolean;
+};
+export const REASON_LABEL: Record<LowPerformanceReason, string> = {
+  content_comprehension: 'Dificuldade de compreensão do conteúdo',
+  reading_interpretation: 'Dificuldade de leitura ou interpretação',
+  attendance: 'Frequência insuficiente',
+  prior_content: 'Necessidade de recuperação de conteúdos anteriores',
+  incomplete_assessment: 'Avaliação incompleta',
+  application_incident: 'Ocorrência durante a aplicação',
+  other: 'Outro motivo',
+};
+export const ACTION_LABEL: Record<PedagogicalAction, string> = {
+  content_review: 'Revisão de conteúdo',
+  targeted_exercises: 'Exercícios direcionados',
+  individual_support: 'Atendimento individual',
+  recovery: 'Recuperação',
+  new_assessment: 'Nova avaliação',
+};
+export function parseFollowups(value: unknown): Followup[] {
+  if (!Array.isArray(value)) throw invalid();
+  return value.map((raw: any) => {
+    if (!isObject(raw) || !['pending', 'justified'].includes(raw.status) || !Array.isArray(raw.reasons) || !Array.isArray(raw.actions)) throw invalid();
+    return { ...raw, id: requireId(raw.id) } as Followup;
+  });
+}
 export type AuthorizeOutcome = 'published' | 'already_published' | 'stale' | 'pending_review' | 'not_found';
 export type AuthorizeResponse = { batchId: string; published: number; items: { resultId: string; versionId: string; outcome: AuthorizeOutcome }[] };
 
@@ -112,6 +147,9 @@ export function parseResultDetail(value: unknown): ResultDetail {
     changes: Array.isArray(value.changes) ? value.changes : [],
     publications: value.publications,
     scans: value.scans.map((s: any) => ({ ...s, id: requireId(s.id) })),
+    belowExpected: value.belowExpected === true,
+    minExpectedPercent: optionalNumber(value.minExpectedPercent),
+    followups: value.followups == null ? [] : parseFollowups(value.followups),
   };
 }
 
@@ -166,4 +204,9 @@ export function parseQuestionList(text: string): number[] {
   const numbers = parts.map(Number);
   if (numbers.some((n) => !Number.isInteger(n) || n <= 0)) throw new Error('Informe os números das questões separados por vírgula.');
   return [...new Set(numbers)].sort((a, b) => a - b);
+}
+
+// Abaixo do mínimo e ainda sem justificativa registrada. Não bloqueia a publicação.
+export function followupPending(student: Pick<StudentResult, 'belowExpected' | 'followupStatus'>): boolean {
+  return student.belowExpected && student.followupStatus !== 'justified';
 }

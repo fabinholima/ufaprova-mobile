@@ -58,7 +58,7 @@ test('detail shows the reading, answer key, pending questions, photo and history
   let reviewed;
   const detail={id:id(7),studentName:'Bia',processingStatus:'needs_review',publicationStatus:'unpublished',currentVersionId:id(8),publishedVersionId:null,
     versions:[{id:id(8),version:1,source:'omr',cardScanId:id(3),items:[{questionNumber:1,status:'correct',selectedLabels:['A'],correctLabels:['A'],awardedPoints:1,maxPoints:1},{questionNumber:2,status:'review_pending',selectedLabels:['B'],correctLabels:['B'],answerStatus:'uncertain',awardedPoints:null,maxPoints:1}],counts:counts(1,1),percent:null,score:null,maxScore:3,createdAt:'2026-11-03T10:00:00Z',createdByName:null}],
-    changes:[],publications:[],scans:[{id:id(3),status:'review',createdAt:'2026-11-03T10:00:00Z',imageAvailable:true,duplicateOfScanId:null}]};
+    belowExpected:false,minExpectedPercent:null,followups:[],changes:[],publications:[],scans:[{id:id(3),status:'review',createdAt:'2026-11-03T10:00:00Z',imageAvailable:true,duplicateOfScanId:null}]};
   const client={applicationResults:async()=>results(),resultDetail:async()=>detail,authorize:async()=>null,saveResultSettings:async()=>null,scanImage:async scan=>({uri:`https://api.test/api/card-scans/${scan}/image`,headers:{authorization:'Bearer t'}})};
   const h=await setup(t,client,{onReviewScan:scan=>{reviewed=scan;return true;}});
   const detailButtons=h.component.root.findAll(node=>node.type==='Pressable'&&text(node)==='Detalhes');
@@ -126,4 +126,71 @@ test('contract helpers and client routes',async()=>{
   assert.equal(requests[0].headers.authorization,'Bearer token');
   assert.deepEqual(await client.scanImage(id(3)),{uri:`https://api.test/api/card-scans/${id(3)}/image`,headers:{authorization:'Bearer token','x-client':'mobile'}});
   await assert.rejects(client.authorize(APP,[{resultId:'x',versionId:id(6)}],id(9)));
+});
+
+test('publishing a result below the minimum points to the pending justification without blocking',async t=>{
+  let data=results();data.students[0]={...data.students[0],belowExpected:true};
+  const client={applicationResults:async()=>data,resultDetail:async()=>null,saveResultSettings:async()=>null,scanImage:async()=>null,saveFollowup:async()=>[],
+    authorize:async(app,items)=>{data=results();data.students[0]={...data.students[0],belowExpected:true,publicationStatus:'published',published:{versionId:id(6),version:1,authorizedAt:'2026-11-03T10:00:00Z',authorizerName:'Profa.',legacy:false}};return {batchId:id(4),published:1,items:items.map(item=>({...item,outcome:'published'}))};}};
+  const h=await setup(t,client);
+  assert.match(h.text,/1 justificativa\(s\) pendente\(s\)/);
+  await h.press('Selecionar todos os prontos');await h.press('Autorizar lançamento');await h.press('Confirmar e publicar');
+  assert.match(h.text,/1 publicado\(s\)/);
+  assert.match(h.text,/1 resultado\(s\) publicado\(s\) abaixo do mínimo esperado\. Registre a justificativa agora ou depois/);
+  assert.match(h.text,/Abaixo do mínimo esperado · justificativa pendente/);
+});
+
+test('the teacher records reasons, actions, internal note and guidance; retries reuse the request id',async t=>{
+  const base={id:id(5),studentName:'Ana',processingStatus:'ready',publicationStatus:'published',currentVersionId:id(6),publishedVersionId:id(6),
+    versions:[{id:id(6),version:1,source:'omr',cardScanId:null,items:[],counts:counts(1),percent:33.33,score:1,maxScore:3,createdAt:'2026-11-03T10:00:00Z',createdByName:null}],
+    belowExpected:true,minExpectedPercent:60,followups:[],changes:[],publications:[],scans:[]};
+  const saves=[];let fail=true;
+  const entry=(input,n)=>({id:id(n),resultVersion:1,status:input.reasons.length?'justified':'pending',reasons:input.reasons,otherReason:input.otherReason??null,actions:input.actions,internalNote:input.internalNote??null,studentGuidance:input.studentGuidance??null,studentGuidancePublished:input.publishGuidance,createdAt:'2026-11-03T11:00:00Z',createdByName:'Profa.'});
+  let data=results();data.students[0]={...data.students[0],belowExpected:true};
+  const client={applicationResults:async()=>data,resultDetail:async()=>base,authorize:async()=>null,saveResultSettings:async()=>null,scanImage:async()=>null,
+    saveFollowup:async(resultId,input,mutation)=>{saves.push({resultId,input,mutation});if(fail){fail=false;throw Error('Falha de conexão');}return [entry(input,2)];}};
+  const h=await setup(t,client);
+  await renderer.act(async()=>h.component.root.findAll(node=>node.type==='Pressable'&&text(node)==='Detalhes')[0].props.onPress());
+  assert.match(h.text,/Abaixo do mínimo esperado \(60%\)\. Justificativa pendente\./);
+  await h.press('Registrar justificativa');
+  assert.match(h.text,/Salvar como pendente/,'nenhum motivo vem marcado');
+  await h.press('Outro motivo');
+  await h.press('Salvar justificativa');
+  assert.match(h.text,/Descreva o outro motivo/);
+  assert.equal(saves.length,0);
+  await h.press('Outro motivo');
+  await h.press('Frequência');
+  await h.press('Recuperação');
+  const input=label=>h.component.root.findAll(node=>node.type==='TextInput'&&node.props.accessibilityLabel===label)[0];
+  await renderer.act(async()=>input('Observação interna').props.onChangeText('Conversar com a família'));
+  await h.press('Não publicar a orientação');
+  await h.press('Salvar justificativa');
+  assert.match(h.text,/Escreva a orientação antes de publicá-la/);
+  await renderer.act(async()=>input('Orientação para o aluno').props.onChangeText('Refaça a lista 3'));
+  await h.press('Salvar justificativa');
+  assert.match(h.text,/Falha de conexão/);
+  await h.press('Salvar justificativa');
+  assert.equal(saves.length,2);
+  assert.equal(saves[0].mutation,saves[1].mutation,'a nova tentativa reaproveita o ID');
+  assert.equal(saves[1].resultId,id(5));
+  assert.deepEqual(saves[1].input.reasons.length,1);
+  assert.equal(saves[1].input.internalNote,'Conversar com a família');
+  assert.equal(saves[1].input.studentGuidance,'Refaça a lista 3');
+  assert.equal(saves[1].input.publishGuidance,true);
+  assert.match(h.text,/Justificativa registrada/);
+  assert.match(h.text,/Situação atual · Justificado/);
+  assert.match(h.text,/Observação interna: Conversar com a família/);
+  assert.match(h.text,/Orientação publicada: Refaça a lista 3/);
+  assert.match(h.text,/Atualizar acompanhamento/);
+});
+
+test('follow-up client posts to the result and returns the parsed history',async()=>{
+  const requests=[];
+  const fetcher=async(url,options)=>{requests.push({url,method:options.method,body:JSON.parse(options.body)});
+    return {ok:true,status:201,json:async()=>({data:{id:id(2),history:[{id:id(2),resultVersion:1,status:'pending',reasons:[],otherReason:null,actions:[],internalNote:null,studentGuidance:null,studentGuidancePublished:false,createdAt:'2026-11-03T11:00:00Z',createdByName:null}]}})};};
+  const client=createScanClient('https://api.test',async()=>'token',fetcher);
+  const history=await client.saveFollowup(id(5),{reasons:[],actions:[],publishGuidance:false},id(9));
+  assert.deepEqual(requests.map(r=>[r.method,r.url]),[['POST',`https://api.test/api/assessment-results/${id(5)}/followups`]]);
+  assert.equal(requests[0].body.clientMutationId,id(9));
+  assert.equal(history.length,1);
 });

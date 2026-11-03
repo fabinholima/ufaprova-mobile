@@ -2,8 +2,8 @@ import { parseSubmission } from './manual-contract';
 import type { ManualPayload, Submission } from './manual-contract';
 import { isPending, parseGrade, parseScan, parseStatus, requireId, reviewResponses } from './scan-contract';
 import type { Candidate, Grade, Label, Scan } from './scan-contract';
-import { parseApplicationResults, parseAuthorize, parseResultDetail, parseSettings } from './results-contract';
-import type { ApplicationResults, AuthorizeResponse, ResultDetail, ResultSettings } from './results-contract';
+import { parseApplicationResults, parseAuthorize, parseFollowups, parseResultDetail, parseSettings } from './results-contract';
+import type { ApplicationResults, AuthorizeResponse, Followup, FollowupInput, ResultDetail, ResultSettings } from './results-contract';
 
 const IMAGE_PREFIX = 'data:image/jpeg;base64,';
 export function jpegDataUrl(base64: string | undefined): string {
@@ -103,6 +103,10 @@ export function createScanClient(apiUrl: string, token: () => Promise<string | n
     },
     async saveResultSettings(applicationId: string, settings: Omit<ResultSettings, 'effectiveMinExpectedPercent' | 'recalculated'>): Promise<ResultSettings> {
       return parseSettings(await request(`/api/assessment-applications/${requireId(applicationId)}/result-settings`, { method: 'PUT', body: JSON.stringify(settings) }));
+    },
+    async saveFollowup(resultId: string, input: FollowupInput, clientMutationId: string): Promise<Followup[]> {
+      const data = await request(`/api/assessment-results/${requireId(resultId)}/followups`, { method: 'POST', body: JSON.stringify({ ...input, clientMutationId: requireId(clientMutationId) }) }) as { history?: unknown };
+      return parseFollowups(data.history);
     },
     // Fonte da foto original do cartão, com a sessão no cabeçalho: a imagem
     // não fica acessível por um link público.
