@@ -16,7 +16,15 @@
         }
       ],
       "expo-secure-store",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permita que o UFA Prova abra fotos de folhas de respostas da galeria.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true

@@ -28,6 +28,7 @@ import type {
   StudentProfile,
 } from "./student-api";
 import { startGoogleLogin, checkGoogleLogin } from "./google-login";
+import { requestPasswordReset } from "./password-reset";
 import type { GoogleAttempt } from "./google-login";
 // onTeacherArea: na web (aluno.<domínio>), leva à área do professor em vez de
 // voltar para a tela de entrada do aplicativo.
@@ -289,6 +290,12 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
                 {mode === "login" ? "Criar conta de aluno" : "Já tenho conta"}
               </Text>
             </Pressable>
+            {mode === "login" &&
+              button(
+                "Esqueci minha senha",
+                async () => setMessage(await requestPasswordReset(apiUrl, email)),
+                true,
+              )}
             {button(
               "Reenviar confirmação de e-mail",
               async () => {

@@ -172,6 +172,18 @@ Na entrada, use **Criar conta de professor/coordenador**. Escolha o perfil, info
 
 O envio guarda a aplicação escolhida; o servidor bloqueia QR de outra aplicação antes de gerar nota. A revisão também não pode trocar esse vínculo. Dados de versões anteriores do aplicativo permanecem no aparelho; novas capturas exigem aplicação válida e a atualização da API/worker com `072_mobile_scan_application.sql`.
 
+## Conferência antes da captura
+
+- A lista de aplicações mostra disciplina, turma, número de questões e versões do gabarito.
+- Gabarito incompleto aparece em vermelho, com as questões, e desativa **Continuar para captura**. O servidor também recusa o envio (422).
+- Além da câmera, **Escolher foto da galeria** aceita cartões já fotografados; a foto passa pela mesma conferência e fila.
+- Foto desfocada ou escura não muda a leitura: o cartão vai para revisão, com a orientação de fotografar de novo.
+- **Esqueci minha senha** (professor e aluno) envia o link de nova senha ao e-mail.
+
+`expo-image-picker` é um módulo nativo novo: gere uma nova compilação do aplicativo antes de distribuir esta versão.
+
+O relatório de entrega, com critérios de aceite, implantação e pendências, está em `docs/relatorio-entrega.md` no repositório da API.
+
 ## Revisão e autorização dos resultados
 
 A correção gera apenas um resultado provisório. O aluno só vê a nota depois

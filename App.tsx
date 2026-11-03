@@ -19,10 +19,11 @@ import type { LocalRecord, OfflineStore, Operation } from './offline-store';
 import { createSynchronizer, refreshRecord } from './offline-sync';
 import { prepareImage } from './prepare-image';
 import { ScanApiError } from './scan-api';
-import {parseApplications} from './application-contract';
+import {answerKeyLine,answerKeyProblem,parseApplications} from './application-contract';
 import type {CorrectionApplication} from './application-contract';
 import { ui } from './ui-styles';
 import { startGoogleLogin, checkGoogleLogin } from './google-login';
+import { requestPasswordReset } from './password-reset';
 import type { GoogleAttempt } from './google-login';
 
 type Screen = 'login' | 'home' | 'assessments' | 'scan' | 'records' | 'record' | 'results';
@@ -272,6 +273,7 @@ export default function App() {
       <TextInput style={ui.input} accessibilityLabel="E-mail" autoCapitalize="none" keyboardType="email-address" placeholder="E-mail" value={email} onChangeText={setEmail} />
       <TextInput style={ui.input} accessibilityLabel="Senha" secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder="Senha" value={password} onChangeText={setPassword} />
       <Pressable accessibilityRole="button" accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'} style={ui.passwordToggle} onPress={() => setShowPassword(value => !value)}><Text style={ui.linkText}>{showPassword ? 'Ocultar senha' : 'Mostrar senha'}</Text></Pressable>
+      <Pressable accessibilityRole="button" disabled={loading} style={ui.passwordToggle} onPress={()=>{setError('');setMessage('');void requestPasswordReset(API_URL,email).then(setMessage,err=>setError(err instanceof Error?err.message:'Não foi possível pedir uma nova senha.'));}}><Text style={ui.linkText}>Esqueci minha senha</Text></Pressable>
       {!!error && <Text style={ui.error}>{error}</Text>}
       <Pressable disabled={loading || !store || !!googleAttempt} style={[ui.primary, (loading || !store || !!googleAttempt) && ui.disabled]} onPress={signIn}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={ui.primaryText}>Entrar</Text>}</Pressable>
       <Text style={ui.separator}>ou</Text>
@@ -305,8 +307,8 @@ export default function App() {
         <Text style={ui.title}>Selecione a aplicação da prova</Text>
         <Text style={ui.text}>Use o cartão de respostas com QR Code gerado no portal. Confira também a escola impressa no cartão.</Text>
         {!applications.length && <><Text style={ui.text}>Nenhuma aplicação disponível. No portal, abra Turmas e alunos, agende a avaliação para a turma e gere os cartões individuais.</Text><Pressable style={ui.secondary} onPress={()=>void Linking.openURL(`${PORTAL_URL}/portal`).catch(()=>setError('Não foi possível abrir o portal.'))}><Text style={ui.buttonText}>Abrir portal para preparar os cartões</Text></Pressable></>}
-        {applications.map(item=><Pressable key={item.id} accessibilityRole="radio" accessibilityState={{selected:selectedApplication?.id===item.id}} style={[ui.card,selectedApplication?.id===item.id&&ui.selected]} onPress={()=>{setSelectedApplication(item);setAssessment({id:item.assessmentId,title:item.title});setSchoolClass({id:item.classId,name:item.className});}}><Text style={ui.cardTitle}>{item.title}</Text><Text style={ui.text}>{item.className} · {item.students} alunos</Text></Pressable>)}
-        <Pressable disabled={!selectedApplication||loading} style={[ui.primary,(!selectedApplication||loading)&&ui.disabled]} onPress={()=>setScreen('scan')}><Text style={ui.primaryText}>Continuar para captura</Text></Pressable>
+        {applications.map(item=><Pressable key={item.id} accessibilityRole="radio" accessibilityState={{selected:selectedApplication?.id===item.id}} style={[ui.card,selectedApplication?.id===item.id&&ui.selected]} onPress={()=>{setSelectedApplication(item);setAssessment({id:item.assessmentId,title:item.title});setSchoolClass({id:item.classId,name:item.className});}}><Text style={ui.cardTitle}>{item.title}</Text><Text style={ui.text}>{[item.subject,item.className,`${item.students} alunos`].filter(Boolean).join(' · ')}</Text>{!!answerKeyLine(item)&&<Text style={ui.small}>{answerKeyLine(item)}</Text>}{!!answerKeyProblem(item)&&<Text style={ui.error}>{answerKeyProblem(item)}</Text>}</Pressable>)}
+        <Pressable disabled={!selectedApplication||loading||!!answerKeyProblem(selectedApplication)} style={[ui.primary,(!selectedApplication||loading||!!answerKeyProblem(selectedApplication))&&ui.disabled]} onPress={()=>setScreen('scan')}><Text style={ui.primaryText}>Continuar para captura</Text></Pressable>
         <Pressable disabled={!selectedApplication||!connected} style={[ui.secondary,(!selectedApplication||!connected)&&ui.disabled]} onPress={()=>setScreen('results')}><Text style={ui.buttonText}>Revisar e autorizar resultados</Text></Pressable>
         {!!selectedApplication&&!connected&&<Text style={ui.small}>A revisão e a autorização dos resultados exigem conexão.</Text>}
         <Pressable style={ui.secondary} onPress={() => setScreen('home')}><Text style={ui.buttonText}>Trocar escola</Text></Pressable>

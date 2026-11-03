@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import type { CameraCapturedPicture } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 
 export type CapturedSheet = {
   photo: CameraCapturedPicture;
@@ -77,6 +78,21 @@ export default function CaptureScreen({ applicationId, school, assessment, schoo
     }
   }
 
+  // Cartões fotografados antes (ou escaneados) entram pela galeria e seguem a
+  // mesma conferência e o mesmo envio das fotos da câmera.
+  async function pickFromGallery() {
+    if (busy.current) return;
+    busy.current = true;
+    setError('');
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      const asset = result.canceled ? null : result.assets?.[0];
+      if (asset?.uri && mounted.current) { setPhoto({ uri: asset.uri, width: asset.width, height: asset.height, format: 'jpg' } as CameraCapturedPicture); setReady(false); }
+    } catch {
+      if (mounted.current) setError('Não foi possível abrir a galeria. Tente novamente.');
+    } finally { busy.current = false; }
+  }
+
   async function confirmPhoto() {
     if (!photo || busy.current) return;
     busy.current = true; setSaving(true); setError('');
@@ -137,6 +153,9 @@ export default function CaptureScreen({ applicationId, school, assessment, schoo
           )}
         </>
       )}
+      {!photo && <Pressable accessibilityRole="button" disabled={capturing} style={[styles.secondary, capturing && styles.disabled]} onPress={() => { void pickFromGallery(); }}>
+        <Text style={styles.buttonText}>Escolher foto da galeria</Text>
+      </Pressable>}
       {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
       <Pressable disabled={capturing || saving} style={[styles.secondary, (capturing || saving) && styles.disabled]} onPress={onBack}>
         <Text style={styles.buttonText}>Voltar para avaliações</Text>

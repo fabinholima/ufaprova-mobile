@@ -9,7 +9,25 @@ export type CorrectionApplication = {
   students: number;
   completed: number;
   scheduledAt?: string | null;
+  subject?: string | null;
+  // Ausentes numa API anterior: nesse caso o app não bloqueia a captura.
+  versions?: { code: string; questions: number; objective: number; missingAnswerKeys: number[] }[];
+  answerKeyReady?: boolean;
 };
+// Resumo do gabarito para o professor conferir antes de corrigir.
+export function answerKeyLine(application: CorrectionApplication): string | null {
+  if (!application.versions) return null;
+  if (!application.versions.length) return "Sem versão de gabarito";
+  const counts = [...new Set(application.versions.map((version) => version.questions))];
+  return `${counts.join(" ou ")} questões · gabarito ${application.versions.length > 1 ? "versões" : "versão"} ${application.versions.map((version) => version.code).join(", ")}`;
+}
+export function answerKeyProblem(application: CorrectionApplication): string | null {
+  if (application.answerKeyReady !== false) return null;
+  const incomplete = application.versions?.find((version) => version.missingAnswerKeys.length);
+  return incomplete
+    ? `Gabarito incompleto na versão ${incomplete.code} (questões ${incomplete.missingAnswerKeys.join(", ")}). Complete-o no portal antes de corrigir.`
+    : "Esta avaliação não tem gabarito válido. Confira-a no portal antes de corrigir.";
+}
 export function parseApplications(value: unknown): CorrectionApplication[] {
   if (!Array.isArray(value)) throw Error("O servidor retornou uma lista de aplicações inválida.");
   return value

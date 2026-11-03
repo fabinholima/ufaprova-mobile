@@ -5,7 +5,7 @@ const school={id:'s',name:'Escola'},assessment={id:'10000000-0000-4000-8000-0000
 function text(node){return typeof node==='string'?node:node.children.map(text).join('');}function button(component,label){return component.root.findAllByType('Pressable').find(node=>text(node).includes(label));}
 async function setup(t, options = {}){
   const db=open(),store=createOfflineStore(db,randomUUID);await store.initialize();t.after(()=>db.close());
-  const application={id:'30000000-0000-4000-8000-000000000001',assessmentId:assessment.id,classId:schoolClass.id,title:assessment.title,className:schoolClass.name,status:'scheduled',students:1,completed:1};
+  const application={id:'30000000-0000-4000-8000-000000000001',assessmentId:assessment.id,classId:schoolClass.id,title:assessment.title,className:schoolClass.name,status:'scheduled',students:1,completed:1,...options.application};
   await store.putCache(account.owner,'applications',[application]);
   await store.putCache(account.owner,'schools',[school]);await store.putCache(account.owner,'assessments',[assessment]);await store.putCache(account.owner,'classes',[schoolClass]);
   let network;let token=options.login ? null : JSON.stringify({...account,sessionToken:'token'});let uploads=0;
@@ -102,4 +102,25 @@ test('a student session on the professor subdomain is sent to the student area, 
   assert.doesNotMatch(text(h.component.root),/Painel do aluno/);
   await h.press('Abrir área do aluno');
   assert.deepEqual(h.switched,['student']);
+});
+
+test('an assessment with an incomplete answer key shows the versions and cannot start correction',async t=>{
+  const h=await setup(t,{application:{subject:'Química',versions:[{code:'A',questions:10,objective:10,missingAnswerKeys:[3,7]}],answerKeyReady:false}});
+  await h.press('Corrigir cartões de respostas');await h.press('Prova');
+  const screen=text(h.component.root);
+  assert.match(screen,/Química · Turma · 1 alunos/);
+  assert.match(screen,/10 questões · gabarito versão A/);
+  assert.match(screen,/Gabarito incompleto na versão A \(questões 3, 7\)/);
+  assert.equal(button(h.component,'Continuar para captura').props.disabled,true);
+});
+test('forgot password asks for the e-mail and gives the same answer whether or not the account exists',async t=>{
+  const h=await setup(t,{login:true});const calls=[];const previous=global.fetch;t.after(()=>{global.fetch=previous;});
+  global.fetch=async(url,options)=>{calls.push({url,body:JSON.parse(options.body)});return Response.json({data:{accepted:true}},{status:202});};
+  await h.press('Esqueci minha senha');
+  assert.match(text(h.component.root),/Informe o e-mail da conta/);assert.equal(calls.length,0);
+  const email=h.component.root.findAll(node=>node.type==='TextInput'&&node.props.accessibilityLabel==='E-mail')[0];
+  await renderer.act(async()=>email.props.onChangeText(' professor@example.test '));
+  await h.press('Esqueci minha senha');
+  assert.equal(calls[0].url,'https://ufaprova-api.onrender.com/api/auth/forgot-password');assert.deepEqual(calls[0].body,{email:'professor@example.test'});
+  assert.match(text(h.component.root),/Se houver uma conta com este e-mail/);
 });
