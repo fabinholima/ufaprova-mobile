@@ -19,6 +19,7 @@ import StudentInviteScanner from "./StudentInviteScanner";
 import StudentPhotoScreen from "./StudentPhotoScreen";
 import StudentGrades from "./StudentGrades";
 import StudentCodeJoin from "./StudentCodeJoin";
+import StudentCodeAccess from "./StudentCodeAccess";
 import { ui } from "./ui-styles";
 import { createStudentClient, verifyStudentSession, STUDENT_SESSION_KEY } from "./student-api";
 import type {
@@ -40,7 +41,7 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
     [photoProfile, setPhotoProfile] = useState<StudentProfile | null>(null);
   const [identity, setIdentity] = useState<StudentIdentity | null>(null),
     [token, setToken] = useState(""),
-    [mode, setMode] = useState<"login" | "register">("login"),
+    [mode, setMode] = useState<"login" | "register" | "code">("login"),
     [name, setName] = useState(""),
     [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
@@ -183,11 +184,45 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
             ? "Minhas turmas"
             : mode === "register"
               ? "Criar conta de aluno"
-              : "Entrar como aluno"}
+              : mode === "code"
+                ? "Entrar com o código da escola"
+                : "Entrar como aluno"}
         </Text>
         {busy && <ActivityIndicator />}
-        {!identity ? (
+        {!identity && mode === "code" ? (
           <>
+            <StudentCodeAccess
+              apiUrl={apiUrl}
+              busy={busy}
+              run={run}
+              onSession={async (result) => {
+                const value = loginToken(result);
+                if (!value) throw Error("Sessão inválida.");
+                await accept(value);
+              }}
+              onEmail={() => {
+                setMode("login");
+                setMessage("");
+              }}
+            />
+            <Pressable style={ui.secondary} onPress={onTeacherArea ?? onBack}>
+              <Text style={ui.buttonText}>{onTeacherArea ? "Sou professor · abrir área do professor" : "Voltar para acesso de professor"}</Text>
+            </Pressable>
+          </>
+        ) : !identity ? (
+          <>
+            {mode === "login" && (
+              <Pressable
+                accessibilityRole="button"
+                style={ui.secondary}
+                onPress={() => {
+                  setMode("code");
+                  setMessage("");
+                }}
+              >
+                <Text style={ui.buttonText}>Não tenho e-mail · entrar com o código da escola</Text>
+              </Pressable>
+            )}
             {mode === "register" && (
               <TextInput
                 style={ui.input}

@@ -30,3 +30,15 @@ test('students without an approved record are told when the photo becomes availa
  await renderer.act(async()=>{component=renderer.create(React.createElement(Screen,{apiUrl:'https://api.example',onBack:()=>{}}));});t.after(()=>renderer.act(()=>component.unmount()));
  assert(text(component.root).includes('Resultado: 8 / 10'));assert(text(component.root).includes('Não foi possível carregar seu cadastro agora.'));
 });
+test('a student without e-mail enters with the school code and the session is saved',async t=>{
+ const previous=global.fetch;t.after(()=>global.fetch=previous);const saved=[],seen=[];
+ global.fetch=async(url,options)=>{seen.push(url);if(url.endsWith('/api/auth/student/code-login'))return Response.json({data:{token:'code-token',user:{id:'u',email:null,displayName:'Ana Souza'},role:'student'}});assert.equal(options.headers.authorization,'Bearer code-token');if(url.endsWith('/api/auth/me'))return Response.json({data:{role:'student',user:{id:'u',displayName:'Ana Souza',email:null}}});return Response.json({data:url.endsWith('/api/student/profile')?[]:[]});};
+ const {default:Screen}=load(path.join(__dirname,'../StudentScreen.tsx'),{'react-native':{ActivityIndicator:'ActivityIndicator',AppState:{currentState:'active'},Linking:{openURL:async()=>{}},Image:'Image',Pressable:'Pressable',SafeAreaView:'SafeAreaView',ScrollView:'ScrollView',StyleSheet:{create:x=>x},Text:'Text',TextInput:'TextInput',View:'View'},'expo-secure-store':{getItemAsync:async()=>null,setItemAsync:async(k,v)=>saved.push([k,v]),deleteItemAsync:async()=>{}},'./ui-styles':{ui:{}},'./StudentInviteScanner':()=>null,'./StudentPhotoScreen':()=>null,'./google-login':{startGoogleLogin:async()=>{},checkGoogleLogin:async()=>false}});
+ let component;await renderer.act(async()=>{component=renderer.create(React.createElement(Screen,{apiUrl:'https://api.example',onBack:()=>{}}));});t.after(()=>renderer.act(()=>component.unmount()));
+ const press=async label=>renderer.act(async()=>component.root.findAllByType('Pressable').find(n=>text(n)===label).props.onPress());
+ const type=(label,value)=>renderer.act(async()=>component.root.findAllByType('TextInput').find(n=>n.props.accessibilityLabel===label).props.onChangeText(value));
+ await press('Não tenho e-mail · entrar com o código da escola');assert(text(component.root).includes('Entrar com o código da escola'));
+ await type('Código do aluno','UFA-1A2B3C4D');await type('Senha','senha-da-ana');await press('Entrar');
+ assert.equal(seen[0],'https://api.example/api/auth/student/code-login');assert(text(component.root).includes('Olá, Ana Souza.'));
+ assert.deepEqual(saved,[['ufaprova.student.session.v1',JSON.stringify({apiUrl:'https://api.example',token:'code-token'})]]);
+});
