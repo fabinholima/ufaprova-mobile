@@ -41,6 +41,15 @@ test('lost upload response retries the same server ID and concurrent sync runs s
   assert.equal((await store.get('owner',id)).submission.id,SUBMISSION);
 });
 
+test('an inactive subscription keeps the photo queued and resumes after renewal',async t=>{
+  const {store}=await setup(t);const id=await store.create('owner',sheet,image);const server=remote();const upload=server.client.upload;let inactive=true;
+  server.client.upload=async(...args)=>{if(inactive)throw new ScanApiError('A assinatura da instituição está inativa.',false,402);return upload(...args);};
+  let clock=1000;const sync=createSynchronizer(store,server.client,'owner',()=>clock);
+  const report=await sync();assert.equal(report.blocked,0);assert.match(report.error,/assinatura/);assert.equal(server.uploads,0);
+  const queued=(await store.operations('owner'))[0];assert.equal(queued.state,'pending');assert.equal((await store.get('owner',id)).imageDataUrl,image);
+  inactive=false;clock+=600_000;await sync();assert.equal(server.uploads,1);assert.equal((await store.get('owner',id)).remoteId,id);
+});
+
 test('manual notes queue offline and only a server acknowledgement updates the final grade',async t=>{
   const {store}=await setup(t);const id=await store.create('owner',sheet,image),server=remote(),sync=createSynchronizer(store,server.client,'owner');await sync();
   const draft=initialManualDraft(submission);draft.points[1]='2,5';draft.feedback[1]='Muito bom';await store.saveDraft('owner',id,'manual',draft);await store.enqueue('owner',id,'manual',{...manualPayload(submission,draft),submissionId:submission.id});
