@@ -9,4 +9,4 @@ export function sameApi(saved: unknown, current = API_URL): boolean {
   if (typeof saved !== 'string') return false;
   return normalize(saved) === normalize(current) || (normalize(saved) === LEGACY_API_URL && normalize(current) === 'https://api.ufaprova.com.br');
 }
-export const PORTAL_URL = process.env.EXPO_PUBLIC_PORTAL_URL || 'https://ufaprova-frontend.onrender.com';
+export const PORTAL_URL = process.env.EXPO_PUBLIC_PORTAL_URL || 'https://ufaprova.com.br';

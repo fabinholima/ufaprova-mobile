@@ -26,7 +26,7 @@ services:
     headers:
       - path: /*
         name: Content-Security-Policy
-        value: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.ufaprova.com.br https://ufaprova-api.onrender.com; connect-src 'self' https://api.ufaprova.com.br https://ufaprova-api.onrender.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+        value: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.ufaprova.com.br; connect-src 'self' https://api.ufaprova.com.br; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
       - path: /*
         name: Permissions-Policy
         value: "camera=(self), microphone=(), geolocation=()"

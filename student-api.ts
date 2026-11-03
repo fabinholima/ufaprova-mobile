@@ -74,7 +74,8 @@ export type SubjectSkills = { subject: string; assessments: number; minSkillEvid
 // Parsed by hand: React Native's URL polyfill is regex-based and differs from the WHATWG URL in edge cases.
 const PORTAL_HOST = /^https:\/\/([a-z0-9.-]+)\/?$/;
 export function inviteCodeFromQr(value: string) {
-  // The portal is served on the official domain and on Render; EXPO_PUBLIC_PORTAL_URL may list others, comma-separated.
+  // The portal is served on the official domain; the old Render host stays accepted for QR codes printed before the move.
+  // EXPO_PUBLIC_PORTAL_URL may list others, comma-separated.
   const hosts = (
     process.env.EXPO_PUBLIC_PORTAL_URL ||
     "https://ufaprova.com.br,https://www.ufaprova.com.br,https://ufaprova-frontend.onrender.com"
