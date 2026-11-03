@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import {
   ActivityIndicator,
   AppState,
@@ -46,6 +46,7 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState<GoogleAttempt | null>(null);
+  const gradesRequest = useMemo(() => createStudentClient(apiUrl, token), [apiUrl, token]);
   const current = useRef<GoogleAttempt | null>(null),
     checking = useRef(false);
   async function run(fn: () => Promise<void>) {
@@ -408,7 +409,7 @@ export default function StudentScreen({ apiUrl, onBack }: { apiUrl: string; onBa
                 </View>
               ))
             )}
-            <StudentGrades activities={activities} />
+            <StudentGrades activities={activities} request={gradesRequest} />
             {button(
               "Sair",
               async () => {

@@ -113,6 +113,19 @@ Quem recebeu do professor o código pessoal do aluno (`UFA-XXXXXXXX`) usa **Tenh
 
 O aluno vê apenas seus próprios vínculos e atividades das turmas aprovadas. Notas que ainda exigem revisão do professor não são exibidas. A sessão de aluno fica separada do armazenamento offline de correção.
 
+A tela de notas começa em **Minhas disciplinas**, com uma entrada por disciplina, o número de avaliações e a média de acertos. Com uma única disciplina, ela abre direto. Dentro da disciplina aparecem:
+
+- a evolução e as notas por período;
+- em cada avaliação, acertos, erros, questões em branco, inválidas e anuladas;
+- os indicadores das habilidades da BNCC, com a quantidade de questões consideradas. Abaixo de 3 questões, o app avisa que ainda não há base para conclusões.
+
+Avaliações publicadas abrem **Ver questões e orientações**, com:
+
+- a marcação do aluno e o gabarito, conforme o que o professor liberou;
+- a orientação publicada pelo professor.
+
+O aluno só vê resultados autorizados pelo professor. Resultados em correção aparecem sem nota. Não há comparação com colegas. Rotas: `GET /api/student/results/:resultId` e `GET /api/student/skill-performance`; uma API sem elas mantém as notas visíveis.
+
 As notas aparecem em **Notas por período**, agrupadas pela data da aplicação em períodos trimestrais do ano civil (1º período: jan–mar, 2º: abr–jun, 3º: jul–set, 4º: out–dez). Não há calendário escolar cadastrado; aplicações sem data ficam em **Sem data de aplicação**. Cada período mostra a média do percentual de acerto. **Minha evolução** mostra as últimas oito avaliações com nota e compara a média dos dois períodos mais recentes. Notas em revisão manual não entram nas médias. A lista vem de `GET /api/student/activities` e inclui somente resultados de cartões lidos pela câmera ou pelo scanner.
 
 Depois da aprovação, a seção **Meu cadastro** mostra o cadastro vinculado e permite **Adicionar foto** ou **Trocar foto** com a câmera frontal. O app reduz a imagem para JPEG de até 400 KB e a envia para `POST /api/student/profile` (`{ studentId, selfieDataUrl }`). Antes da aprovação a foto não fica disponível. Se a API ainda não oferecer essa rota, notas e solicitações continuam visíveis.

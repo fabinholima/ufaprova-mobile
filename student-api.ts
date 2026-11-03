@@ -43,7 +43,35 @@ export type StudentActivity = {
   maxScore: string | null;
   requiresManualReview: boolean;
   scheduledAt?: string | null;
+  // Campos da publicação autorizada (APIs anteriores não os enviam).
+  subject?: string | null;
+  resultId?: string | null;
+  resultStatus?: "published" | "in_correction" | "not_corrected";
+  percent?: number | null;
+  validCount?: number | null;
+  correctCount?: number | null;
+  incorrectCount?: number | null;
+  blankCount?: number | null;
+  invalidCount?: number | null;
+  annulledCount?: number | null;
+  publishedAt?: string | null;
 };
+export type SkillIndicator = {
+  code: string;
+  description: string | null;
+  questions: number;
+  correct: number;
+  percent: number;
+  sufficientEvidence: boolean;
+};
+export type StudentResultDetail = StudentActivity & {
+  releasePolicy: "summary" | "answers" | "answers_and_key";
+  questions: { questionNumber: number; status: string; selectedLabels?: string[]; correctLabels?: string[] }[];
+  skills: SkillIndicator[];
+  minSkillEvidence: number;
+  guidance: { text: string; publishedAt: string } | null;
+};
+export type SubjectSkills = { subject: string; assessments: number; minSkillEvidence: number; skills: SkillIndicator[] };
 // Parsed by hand: React Native's URL polyfill is regex-based and differs from the WHATWG URL in edge cases.
 const PORTAL_HOST = /^https:\/\/([a-z0-9.-]+)\/?$/;
 export function inviteCodeFromQr(value: string) {

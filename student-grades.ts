@@ -12,7 +12,10 @@ export type GradePeriod = {
 export type EvolutionPoint = { id: string; title: string; date: Date; percent: number };
 
 export function percentOf(activity: StudentActivity) {
-  if (activity.requiresManualReview || activity.score === null || activity.maxScore === null) return null;
+  if (activity.requiresManualReview) return null;
+  // Percentual de acertos calculado no servidor sobre as questões válidas.
+  if (typeof activity.percent === "number") return activity.percent;
+  if (activity.score === null || activity.maxScore === null) return null;
   const score = Number(activity.score),
     max = Number(activity.maxScore);
   if (!Number.isFinite(score) || !Number.isFinite(max) || max <= 0) return null;
@@ -83,4 +86,37 @@ export function trend(periods: GradePeriod[]) {
     previous: previous.label,
     difference: Math.round((current.average! - previous.average!) * 10) / 10,
   };
+}
+
+export const NO_SUBJECT = "Sem disciplina";
+export type SubjectGroup = { subject: string; average: number | null; graded: number; activities: StudentActivity[] };
+
+// Tela inicial do aluno: uma entrada por disciplina, em ordem alfabética.
+export function groupBySubject(activities: StudentActivity[]): SubjectGroup[] {
+  const groups = new Map<string, StudentActivity[]>();
+  for (const activity of activities) {
+    const subject = activity.subject?.trim() || NO_SUBJECT;
+    groups.set(subject, [...(groups.get(subject) ?? []), activity]);
+  }
+  return [...groups]
+    .map(([subject, items]) => {
+      const percents = items.flatMap((item) => {
+        const value = percentOf(item);
+        return value === null ? [] : [value];
+      });
+      return { subject, average: average(percents), graded: percents.length, activities: items };
+    })
+    .sort((a, b) => (a.subject === NO_SUBJECT ? 1 : b.subject === NO_SUBJECT ? -1 : a.subject.localeCompare(b.subject, "pt-BR")));
+}
+
+export function countSummary(activity: StudentActivity): string | null {
+  if (activity.correctCount == null || activity.validCount == null) return null;
+  const parts = [
+    `${activity.correctCount} acerto(s) de ${activity.validCount}`,
+    `${activity.incorrectCount ?? 0} erro(s)`,
+    `${activity.blankCount ?? 0} em branco`,
+  ];
+  if (activity.invalidCount) parts.push(`${activity.invalidCount} com marcação inválida`);
+  if (activity.annulledCount) parts.push(`${activity.annulledCount} anulada(s)`);
+  return parts.join(" · ");
 }
