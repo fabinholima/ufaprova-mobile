@@ -32,13 +32,16 @@ import type {
 import { startGoogleLogin, checkGoogleLogin } from "./google-login";
 import { requestPasswordReset } from "./password-reset";
 import type { GoogleAttempt } from "./google-login";
+const photoSkipKey = (studentId: string) => `ufaprova.studentPhotoSkipped.${studentId}`;
 // onTeacherArea: na web (aluno.<domínio>), leva à área do professor em vez de
 // voltar para a tela de entrada do aplicativo.
 export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUrl: string; onBack: () => void; onTeacherArea?: () => void }) {
   const [scanning, setScanning] = useState(false),
     [activities, setActivities] = useState<StudentActivity[]>([]),
     [profiles, setProfiles] = useState<StudentProfile[] | null>([]),
-    [photoProfile, setPhotoProfile] = useState<StudentProfile | null>(null);
+    [photoProfile, setPhotoProfile] = useState<StudentProfile | null>(null),
+    // Aberta sozinha ao entrar: "Agora não" fica guardado e não pergunta de novo.
+    [photoPrompt, setPhotoPrompt] = useState(false);
   const [identity, setIdentity] = useState<StudentIdentity | null>(null),
     [token, setToken] = useState(""),
     [mode, setMode] = useState<"login" | "register" | "code">("login"),
@@ -77,6 +80,7 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
     setRequests(list);
     setActivities(own);
     setProfiles(profile);
+    return profile;
   }
   async function accept(received: string) {
     const value = await persistSession(apiUrl, received);
@@ -86,7 +90,13 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
     setToken(value);
     setPassword("");
     setVisible(false);
-    await refresh(value);
+    const profile = await refresh(value);
+    // Primeiro acesso com o cadastro sem foto: abre a câmera direto.
+    const missing = profile?.find((p) => !p.selfieDataUrl);
+    if (missing && !(await SecureStore.getItemAsync(photoSkipKey(missing.id)))) {
+      setPhotoPrompt(true);
+      setPhotoProfile(missing);
+    }
   }
   useEffect(() => {
     let active = true;
@@ -150,8 +160,14 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
             apiUrl={apiUrl}
             token={token}
             profile={photoProfile}
-            onBack={() => setPhotoProfile(null)}
+            backLabel={photoPrompt ? "Agora não" : "Voltar"}
+            onBack={() => {
+              if (photoPrompt) void SecureStore.setItemAsync(photoSkipKey(photoProfile.id), "1").catch(() => {});
+              setPhotoPrompt(false);
+              setPhotoProfile(null);
+            }}
             onSaved={async () => {
+              setPhotoPrompt(false);
               setPhotoProfile(null);
               setMessage("Foto salva no seu cadastro.");
               await refresh().catch(() => {});
@@ -405,7 +421,7 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
               <Text style={ui.buttonText}>Ler QR Code da turma</Text>
             </Pressable>
             <Text style={ui.title}>Meus vínculos e solicitações</Text>
-            {button("Atualizar solicitações", async () => refresh(), true)}
+            {button("Atualizar solicitações", async () => { await refresh(); }, true)}
             {!requests.length && <Text style={ui.small}>Nenhuma solicitação enviada.</Text>}
             {requests.map((r) => (
               <View key={r.id} style={ui.card}>
@@ -447,6 +463,7 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
                     style={[ui.secondary, busy && ui.disabled]}
                     onPress={() => {
                       setMessage("");
+                      setPhotoPrompt(false);
                       setPhotoProfile(p);
                     }}
                   >

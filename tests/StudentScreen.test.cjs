@@ -9,7 +9,7 @@ test('student checks the class before requesting membership and sees pending the
  await renderer.act(async()=>component.root.findAllByType('TextInput').find(n=>n.props.accessibilityLabel==='Código da turma').props.onChangeText('ABCD-EFGH'));await press('Conferir turma');assert(text(component.root).includes('Professor: Professor'));assert.equal(requested,0);await press('Solicitar participação');assert.equal(requested,1);assert(text(component.root).includes('Aguardando aprovação'));status='approved';await press('Atualizar solicitações');assert(text(component.root).includes('Vínculo aprovado'));assert(!text(component.root).includes('Digitalizações'));
 });
 
-function loadScreen(fetchImpl,PhotoScreen=()=>null){global.fetch=fetchImpl;return load(path.join(__dirname,'../StudentScreen.tsx'),{'react-native':{ActivityIndicator:'ActivityIndicator',AppState:{currentState:'active'},Image:'Image',Linking:{openURL:async()=>{}},Pressable:'Pressable',SafeAreaView:'SafeAreaView',ScrollView:'ScrollView',StyleSheet:{create:x=>x},Text:'Text',TextInput:'TextInput',View:'View'},'expo-secure-store':{getItemAsync:async()=>JSON.stringify({apiUrl:'https://api.example',token:'student-token'}),setItemAsync:async()=>{},deleteItemAsync:async()=>{}},'./ui-styles':{ui:{}},'./StudentInviteScanner':()=>null,'./StudentPhotoScreen':PhotoScreen,'./google-login':{startGoogleLogin:async()=>{},checkGoogleLogin:async()=>false}}).default;}
+function loadScreen(fetchImpl,PhotoScreen=()=>null,store=null){global.fetch=fetchImpl;const session=JSON.stringify({apiUrl:'https://api.example',token:'student-token'});return load(path.join(__dirname,'../StudentScreen.tsx'),{'react-native':{ActivityIndicator:'ActivityIndicator',AppState:{currentState:'active'},Image:'Image',Linking:{openURL:async()=>{}},Pressable:'Pressable',SafeAreaView:'SafeAreaView',ScrollView:'ScrollView',StyleSheet:{create:x=>x},Text:'Text',TextInput:'TextInput',View:'View'},'expo-secure-store':{getItemAsync:async k=>!store?session:k.includes('session')?session:store.get(k)??null,setItemAsync:async(k,v)=>{store?.set(k,v);},deleteItemAsync:async()=>{}},'./ui-styles':{ui:{}},'./StudentInviteScanner':()=>null,'./StudentPhotoScreen':PhotoScreen,'./google-login':{startGoogleLogin:async()=>{},checkGoogleLogin:async()=>false}}).default;}
 const base=(url,profile)=>url.endsWith('/api/auth/me')?{role:'student',user:{id:'u',displayName:'Aluno',email:'a@example.test'}}:url.endsWith('/api/student/profile')?profile():url.endsWith('/api/student/activities')?[{id:'x',title:'Prova 1',className:'6º A',schoolName:'Escola',score:'8',maxScore:'10',requiresManualReview:false}]:[];
 test('approved student opens the photo screen for the linked record and sees the saved photo after refresh',async t=>{
  const previous=global.fetch;t.after(()=>global.fetch=previous);let photo=null,opened;
@@ -41,4 +41,20 @@ test('a student without e-mail enters with the school code and the session is sa
  await type('Código do aluno','UFA-1A2B3C4D');await type('Senha','senha-da-ana');await press('Entrar');
  assert.equal(seen[0],'https://api.example/api/auth/student/code-login');assert(text(component.root).includes('Olá, Ana Souza.'));
  assert.deepEqual(saved,[['ufaprova.student.session.v1',JSON.stringify({apiUrl:'https://api.example',token:'code-token'})]]);
+});
+
+test('entering with a record without photo opens the camera once; "Agora não" is remembered on this device',async t=>{
+ const previous=global.fetch;t.after(()=>global.fetch=previous);const store=new Map();let opened=null,photo=null;
+ const Screen=loadScreen(async url=>Response.json({data:base(url,()=>[{id:'s1',name:'Aluno Silva',registration:'123',selfieDataUrl:photo}])}),props=>{opened=props;return null;},store);
+ let component;await renderer.act(async()=>{component=renderer.create(React.createElement(Screen,{apiUrl:'https://api.example',onBack:()=>{}}));});
+ assert.equal(opened.profile.id,'s1');assert.equal(opened.backLabel,'Agora não');
+ await renderer.act(async()=>opened.onBack());assert.equal(store.get('ufaprova.studentPhotoSkipped.s1'),'1');
+ assert(component.root.findAllByType('Pressable').some(n=>text(n)==='Adicionar foto'));
+ opened=null;await renderer.act(async()=>component.root.findAllByType('Pressable').find(n=>text(n)==='Adicionar foto').props.onPress());assert.equal(opened.backLabel,'Voltar');
+ await renderer.act(()=>component.unmount());opened=null;
+ await renderer.act(async()=>{component=renderer.create(React.createElement(Screen,{apiUrl:'https://api.example',onBack:()=>{}}));});
+ assert.equal(opened,null,'a skipped record does not reopen the camera');await renderer.act(()=>component.unmount());
+ store.clear();photo='data:image/jpeg;base64,aGVsbG8=';
+ await renderer.act(async()=>{component=renderer.create(React.createElement(Screen,{apiUrl:'https://api.example',onBack:()=>{}}));});t.after(()=>renderer.act(()=>component.unmount()));
+ assert.equal(opened,null,'a record with photo does not open the camera');
 });

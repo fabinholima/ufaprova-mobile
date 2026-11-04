@@ -13,9 +13,10 @@ type Props = {
   profile: StudentProfile;
   onSaved: () => void | Promise<void>;
   onBack: () => void;
+  backLabel?: string;
 };
 
-export default function StudentPhotoScreen({ apiUrl, token, profile, onSaved, onBack }: Props) {
+export default function StudentPhotoScreen({ apiUrl, token, profile, onSaved, onBack, backLabel = "Voltar" }: Props) {
   const camera = useRef<CameraView>(null);
   const busy = useRef(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -148,7 +149,7 @@ export default function StudentPhotoScreen({ apiUrl, token, profile, onSaved, on
         style={[ui.secondary, working && ui.disabled]}
         onPress={onBack}
       >
-        <Text style={ui.buttonText}>Voltar</Text>
+        <Text style={ui.buttonText}>{backLabel}</Text>
       </Pressable>
     </>
   );
