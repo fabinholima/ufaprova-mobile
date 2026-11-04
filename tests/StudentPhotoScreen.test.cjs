@@ -96,13 +96,13 @@ test("rejected uploads and oversized photos stay on screen with the reason and c
 
   const other = await setup(t, {
     prepareSelfie: async () => {
-      throw Error("A foto ficou maior que 400 KB. Tente novamente.");
+      throw Error("A foto ficou maior que 100 KB. Tente novamente.");
     },
   });
   await renderer.act(async () => other.camera().onCameraReady());
   await other.press("Tirar foto");
   await other.press("Usar esta foto");
-  assert(text(other.component.root).includes("400 KB"));
+  assert(text(other.component.root).includes("100 KB"));
   assert.equal(other.calls.length, 0);
 });
 test("camera permission is requested before showing the camera", async (t) => {

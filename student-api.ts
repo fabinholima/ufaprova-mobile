@@ -102,12 +102,12 @@ export type StudentProfile = {
   registration: string;
   selfieDataUrl: string | null;
 };
-export const SELFIE_MAX_BYTES = 400000;
+export const SELFIE_MAX_BYTES = 100000;
 export function selfieDataUrl(base64: string | undefined) {
   const value = (base64 || "").replace(/\s/g, "");
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) throw Error("Não foi possível preparar a foto.");
   const bytes = Math.floor((value.length * 3) / 4) - (value.match(/=+$/)?.[0].length || 0);
-  if (bytes > SELFIE_MAX_BYTES) throw Error("A foto ficou maior que 400 KB. Tente novamente.");
+  if (bytes > SELFIE_MAX_BYTES) throw Error("A foto ficou maior que 100 KB. Tente novamente.");
   return `data:image/jpeg;base64,${value}`;
 }
 export type StudentCodeMatch = {
