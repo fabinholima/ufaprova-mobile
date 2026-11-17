@@ -4,6 +4,7 @@
     "slug": "ufaprova",
     "version": "0.1.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "scheme": "ufaprova",
     "userInterfaceStyle": "light",
     "plugins": [
@@ -30,7 +31,15 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "br.com.ufaprova.app"
+      "package": "br.com.ufaprova.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1d4ed8"
+      },
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
     "web": {
       "bundler": "metro",
