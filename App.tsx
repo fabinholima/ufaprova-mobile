@@ -9,7 +9,8 @@ import { moveAccount } from './account';
 import { hostProfile, switchProfile, warnBeforeLeaving } from './host-profile';
 import EducatorRegistrationScreen from './EducatorRegistrationScreen';
 import StudentScreen from './StudentScreen';
-import {STUDENT_SESSION_KEY} from './student-api';
+import DeleteAccount from './DeleteAccount';
+import {STUDENT_SESSION_KEY, createStudentClient} from './student-api';
 import CaptureScreen from './CaptureScreen';
 import type { CapturedSheet } from './CaptureScreen';
 import RecordScreen, { localStatus } from './RecordScreen';
@@ -224,6 +225,12 @@ export default function App() {
     } catch (err) { setError(err instanceof Error ? err.message : 'Falha de conexão com a API.'); }
     finally { setLoading(false); }
   }
+  // Token da sessão guardada da conta (no navegador a sessão é o cookie e não há token).
+  async function sessionToken(current: Account) {
+    const saved = await SecureStore.getItemAsync(ACCOUNT_KEY);
+    const stored = saved ? JSON.parse(saved) : null;
+    return stored?.owner === current.owner && typeof stored.sessionToken === 'string' ? stored.sessionToken : undefined;
+  }
   async function signOut() {
     ownerRef.current = null;
     setAccount(null); setSyncing(false); setScreen('login'); setPassword(''); setError(''); setMessage('');
@@ -331,6 +338,7 @@ export default function App() {
         <Pressable style={ui.primary} onPress={() => setScreen('home')}><Text style={ui.primaryText}>Nova captura</Text></Pressable>
       </>}
       <Pressable style={ui.secondary} onPress={() => { void signOut(); }}><Text style={ui.buttonText}>Sair da conta</Text></Pressable>
+      {account && connected && <DeleteAccount request={async (path, input) => createStudentClient(account.apiUrl, await sessionToken(account))(path, input)} onDeleted={async () => { await store?.clearOwner(account.owner); await signOut(); }} />}
     </>}
   </ScrollView></SafeAreaView>;
 }

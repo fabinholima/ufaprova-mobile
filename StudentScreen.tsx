@@ -20,6 +20,7 @@ import StudentPhotoScreen from "./StudentPhotoScreen";
 import StudentGrades from "./StudentGrades";
 import StudentCodeJoin from "./StudentCodeJoin";
 import StudentCodeAccess from "./StudentCodeAccess";
+import DeleteAccount from "./DeleteAccount";
 import { ui } from "./ui-styles";
 import { createStudentClient, verifyStudentSession, STUDENT_SESSION_KEY } from "./student-api";
 import type {
@@ -68,6 +69,15 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
     } finally {
       setBusy(false);
     }
+  }
+  async function forgetSession() {
+    await SecureStore.deleteItemAsync(STUDENT_SESSION_KEY);
+    setIdentity(null);
+    setToken("");
+    setRequests([]);
+    setProfiles([]);
+    setInvite(null);
+    onBack();
   }
   async function refresh(value = token) {
     const client = createStudentClient(apiUrl, value);
@@ -479,16 +489,14 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
               "Sair",
               async () => {
                 await createStudentClient(apiUrl, token)("/api/auth/logout", {});
-                await SecureStore.deleteItemAsync(STUDENT_SESSION_KEY);
-                setIdentity(null);
-                setToken("");
-                setRequests([]);
-                setProfiles([]);
-                setInvite(null);
-                onBack();
+                await forgetSession();
               },
               true,
             )}
+            <DeleteAccount
+              request={(path, input) => createStudentClient(apiUrl, token)(path, input)}
+              onDeleted={forgetSession}
+            />
           </>
         )}
         {!!message && (

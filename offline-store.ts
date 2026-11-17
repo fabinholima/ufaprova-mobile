@@ -35,6 +35,8 @@ export function createOfflineStore(db: Database, uuid: () => string, now = Date.
   const methods = {
     async initialize() { const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version'); if ((version?.user_version ?? 0) > 1) throw new Error('Os dados locais exigem uma versão mais recente do aplicativo.'); await db.execAsync(offlineSchema); await db.runAsync("UPDATE outbox SET state='pending' WHERE state='sending'"); },
     async cache<T>(owner: string, key: string): Promise<T | null> { const row = await db.getFirstAsync<{ json: string }>('SELECT json FROM mobile_cache WHERE owner=? AND key=?', owner, key); return row ? JSON.parse(row.json) : null; },
+    // Conta excluída: apaga deste aparelho tudo o que é dela, inclusive fotos não enviadas.
+    async clearOwner(owner: string) { await db.withExclusiveTransactionAsync(async tx => { for (const table of ['local_drafts', 'outbox', 'local_records', 'mobile_cache']) await tx.runAsync(`DELETE FROM ${table} WHERE owner=?`, owner); }); },
     async putCache(owner: string, key: string, value: unknown) { await db.runAsync('INSERT INTO mobile_cache(owner,key,json) VALUES(?,?,?) ON CONFLICT(owner,key) DO UPDATE SET json=excluded.json', owner, key, JSON.stringify(value)); },
     async create(owner: string, sheet: CapturedSheet, imageDataUrl: string): Promise<string> {
       const id = uuid();
