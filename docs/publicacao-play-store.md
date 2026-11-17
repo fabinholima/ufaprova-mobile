@@ -52,14 +52,13 @@ Na primeira vez, deixe o EAS gerar a chave de assinatura (keystore). Ela fica gu
    - Ícone 512×512: `assets/play-store-icon-512.png`.
    - Imagem de destaque 1024×500 e capturas de tela do celular (pelo menos 2).
    - Descrição curta e completa.
-4. Política de privacidade: `https://ufaprova.com.br/privacidade`.
+4. Política de privacidade: `https://ufaprova.com.br/privacidade`. Exclusão de conta (Segurança dos dados): `https://ufaprova.com.br/excluir-conta`; no app, "Excluir minha conta".
 5. **Acesso ao app:** a revisão da Google precisa entrar no app. Informe uma conta de teste (professor e aluno) que não tenha dados reais.
 6. Formulários: classificação de conteúdo, público-alvo, segurança dos dados (o app coleta nome, e-mail, fotos de folhas de resposta, foto do aluno e notas; usa a câmera; os dados vão para a API por HTTPS).
 7. Teste interno ou fechado → produção, quando o Console liberar.
 
 ## Pontos que podem barrar a revisão
 
-- **Exclusão de conta:** apps que criam conta precisam oferecer ao usuário um jeito de pedir a exclusão da conta dentro do app e por um link na web, informado no Console. Hoje só o administrador do portal exclui contas.
 - **Público-alvo com menores de 13 anos:** se alunos dessa idade usam o app, a Google aplica a política para famílias, com exigências extras (dados de crianças, fotos, login). Responda o formulário de público-alvo de acordo com o uso real.
 
 ## Envios seguintes (opcional)
