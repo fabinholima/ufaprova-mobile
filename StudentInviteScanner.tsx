@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { Pressable, Text, View } from "react-native";
+import { Linking, Pressable, Text, View } from "react-native";
 import { ui } from "./ui-styles";
 import { inviteCodeFromQr } from "./student-api";
 export default function StudentInviteScanner({
@@ -33,9 +33,24 @@ export default function StudentInviteScanner({
           }}
         />
       ) : (
-        <Pressable style={ui.primary} onPress={() => void requestPermission()}>
-          <Text style={ui.primaryText}>Permitir câmera para ler QR Code</Text>
-        </Pressable>
+        <>
+          {permission?.canAskAgain === false && (
+            <Text style={ui.small}>A câmera foi negada. Libere em Configurações › Apps › UFA Prova › Permissões.</Text>
+          )}
+          <Pressable
+            style={ui.primary}
+            onPress={() =>
+              // Negada de vez, o Android não mostra o pedido de novo: abre as configurações do app.
+              void (permission?.canAskAgain === false ? Linking.openSettings() : requestPermission()).catch(() =>
+                setError("Não foi possível abrir a permissão da câmera. Tente novamente."),
+              )
+            }
+          >
+            <Text style={ui.primaryText}>
+              {permission?.canAskAgain === false ? "Abrir configurações da câmera" : "Permitir câmera para ler QR Code"}
+            </Text>
+          </Pressable>
+        </>
       )}
       {!!error && <Text style={ui.error}>{error}</Text>}
       <Pressable style={ui.secondary} onPress={onClose}>
