@@ -3,8 +3,9 @@ import { Image, Pressable, Text, TextInput, View } from 'react-native';
 import { initialManualDraft, isManual, manualPayload } from './manual-contract';
 import type { ManualDraft, RichBlock } from './manual-contract';
 import type { LocalRecord, OfflineStore, Operation } from './offline-store';
-import { ui } from './ui-styles';
+import { useUi } from './ui-styles';
 function RichContent({ blocks }: { blocks: RichBlock[] }) {
+  const ui = useUi();
   return <>{blocks.map((block, index) => {
     const image = block.dataUrl || block.svgDataUrl;
     if (image) return <View key={index}><Image source={{ uri: image }} style={{ height: 180, width: '100%' }} resizeMode="contain" accessibilityLabel={block.alt || block.caption || 'Ilustração da questão'} />{!!block.caption && <Text style={ui.small}>{block.caption}</Text>}</View>;
@@ -15,6 +16,7 @@ function RichContent({ blocks }: { blocks: RichBlock[] }) {
 export default function ManualReviewScreen({ record, store, operation, onSaved, onRefresh }: {
   record: LocalRecord; store: OfflineStore; operation?: Operation; onSaved: () => Promise<void>; onRefresh: () => Promise<void>;
 }) {
+  const ui = useUi();
   const submission = record.submission!;
   const [draft, setDraft] = useState<ManualDraft | null>(null);
   const [checked, setChecked] = useState(false);

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 import { ACTION_LABEL, REASON_LABEL } from './results-contract';
 import type { Followup, FollowupInput, LowPerformanceReason, PedagogicalAction } from './results-contract';
-import { ui } from './ui-styles';
+import { useUi } from './ui-styles';
 
 // Justificativa de baixo rendimento registrada pelo professor. O sistema não
 // sugere motivos: todos começam desmarcados, inclusive ao atualizar.
@@ -10,6 +10,7 @@ export default function FollowupForm({ current, connected, newId, onSave, onCanc
   current: Followup | null; connected: boolean; newId: () => string;
   onSave: (input: FollowupInput, clientMutationId: string) => Promise<void>; onCancel: () => void;
 }) {
+  const ui = useUi();
   const [reasons, setReasons] = useState<LowPerformanceReason[]>([]);
   const [otherReason, setOtherReason] = useState('');
   const [actions, setActions] = useState<PedagogicalAction[]>(current?.actions ?? []);

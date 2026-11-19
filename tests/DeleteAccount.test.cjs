@@ -10,7 +10,7 @@ const text = (node) => (typeof node === "string" ? node : (node.children || []).
 async function setup(t, request) {
   const { default: DeleteAccount } = load(path.join(__dirname, "../DeleteAccount.tsx"), {
     "react-native": { Pressable: "Pressable", Text: "Text", TextInput: "TextInput", View: "View" },
-    "./ui-styles": { ui: {} },
+    "./ui-styles": { ui: {}, useUi: () => ({ small: {} }) },
   });
   const calls = [];
   let deleted = 0,

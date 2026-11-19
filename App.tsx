@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Linking, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, AppState, BackHandler, Linking, Pressable, Text, TextInput, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import NetInfo from '@react-native-community/netinfo';
 import * as Crypto from 'expo-crypto';
 import { sessionStore as SecureStore } from './platform-store';
@@ -23,17 +25,28 @@ import { prepareImage } from './prepare-image';
 import { ScanApiError } from './scan-api';
 import {answerKeyLine,answerKeyProblem,parseApplications} from './application-contract';
 import type {CorrectionApplication} from './application-contract';
-import { ui } from './ui-styles';
+import { useUi } from './ui-styles';
+import { EmptyState, Header, Loading, Notice, Screen, TabBar } from './components';
+import type { Tab } from './components';
 import { startGoogleLogin, checkGoogleLogin } from './google-login';
 import { requestPasswordReset } from './password-reset';
 import type { GoogleAttempt } from './google-login';
 
-type Screen = 'login' | 'home' | 'assessments' | 'scan' | 'records' | 'record' | 'results';
+type Screen = 'login' | 'home' | 'assessments' | 'scan' | 'records' | 'record' | 'results' | 'account';
+type TeacherTab = 'correct' | 'records' | 'account';
+const tabOf = (screen: Screen): TeacherTab => screen === 'records' || screen === 'record' ? 'records' : screen === 'account' ? 'account' : 'correct';
+// Tela anterior de cada tela, para o botão voltar do Android e o "Voltar" do cabeçalho.
+const parentOf: Partial<Record<Screen, Screen>> = { assessments: 'home', scan: 'assessments', results: 'assessments', record: 'records' };
 type School = { id: string; name: string; city?: string; state?: string };
 type Assessment = { id: string; title: string; subject?: string; grade?: string };
 type SchoolClass = { id: string; name: string; grade?: string; schoolYear?: number };
 
 export default function App() {
+  return <SafeAreaProvider><StatusBar style="auto" /><TeacherApp /></SafeAreaProvider>;
+}
+
+function TeacherApp() {
+  const ui = useUi();
   const [educatorRegistration,setEducatorRegistration]=useState(false);
   const [studentAccess,setStudentAccess]=useState(false);
   useEffect(()=>{void SecureStore.getItemAsync(STUDENT_SESSION_KEY).then(raw=>{if(raw){const value=JSON.parse(raw);if(typeof value.token==='string'&&sameApi(value.apiUrl))setStudentAccess(true);}}).catch(()=>{});},[]);
@@ -67,6 +80,9 @@ export default function App() {
   const [records, setRecords] = useState<LocalRecord[]>([]);
   const [operations, setOperations] = useState<Operation[]>([]);
   const [recordId, setRecordId] = useState<string | null>(null);
+  // Última tela da aba Corrigir, para voltar a ela ao trocar de aba.
+  const correctScreen = useRef<Screen>('home');
+  const [refreshing, setRefreshing] = useState(false);
   const client = useMemo(() => account ? accountClient(account) : null, [account]);
   const synchronizer = useMemo(() => store && client && account ? createSynchronizer(store, client, account.owner) : null, [store, client, account]);
 
@@ -257,6 +273,26 @@ export default function App() {
       await reload(); if (ownerRef.current === account.owner) { setRecordId(id); setScreen('record'); }
     } finally { savingCapture.current = false; }
   }
+  useEffect(() => { if (screen === 'home' || screen === 'assessments') correctScreen.current = screen; }, [screen]);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      const parent = parentOf[screen];
+      if (parent) { setScreen(parent); return true; }
+      if (screen !== 'login' && screen !== 'home') { setScreen(correctScreen.current); return true; }
+      return false;
+    });
+    return () => subscription.remove();
+  }, [screen]);
+  function changeTab(tab: TeacherTab) {
+    setError('');
+    setScreen(tab === 'records' ? 'records' : tab === 'account' ? 'account' : correctScreen.current);
+  }
+  async function pullToRefresh() {
+    if (!account || !store || refreshing) return;
+    setRefreshing(true);
+    try { if (tabOf(screen) === 'records') await sync(true); else if (connected) await loadCatalog(account, store); }
+    finally { setRefreshing(false); }
+  }
   const selectedRecord = records.find(record => record.id === recordId);
   async function refreshSelected() {
     if (!connected || !client || !store || !selectedRecord) throw new Error('Conecte-se para atualizar o resultado do servidor.');
@@ -275,70 +311,91 @@ export default function App() {
     if(!application){setScreen('assessments');setMessage('Selecione a aplicação antes de capturar o próximo cartão.');}else setScreen('scan');
   }
   if(educatorRegistration)return <EducatorRegistrationScreen apiUrl={API_URL} onBack={()=>setEducatorRegistration(false)} onCreated={(value,role)=>{setEducatorRegistration(false);setEmail(value);setPassword('');setShowPassword(false);setError('');setMessage(`Conta de ${role==='coordinator'?'coordenador':'professor'} criada. Confirme o link enviado ao seu e-mail e depois entre aqui.`);}} />;
-  if(studentAccess&&hostProfile==='teacher')return <SafeAreaView style={ui.safe}><ScrollView contentContainerStyle={ui.container}>
-    <Text style={ui.eyebrow}>UFA PROVA</Text><Text style={ui.title}>Conta de aluno</Text>
+  if(studentAccess&&hostProfile==='teacher')return <Screen>
+    <Header title="Conta de aluno" />
     <Text style={ui.text}>Esta entrada é a área do professor. Suas notas e turmas ficam na área do aluno.</Text>
     <Pressable accessibilityRole="button" style={ui.primary} onPress={()=>switchProfile('student')}><Text style={ui.primaryText}>Abrir área do aluno</Text></Pressable>
     <Pressable accessibilityRole="button" style={ui.secondary} onPress={()=>{void endSession(API_URL).then(()=>SecureStore.deleteItemAsync(STUDENT_SESSION_KEY)).finally(()=>setStudentAccess(false));}}><Text style={ui.buttonText}>Sair e entrar como professor</Text></Pressable>
-  </ScrollView></SafeAreaView>;
+  </Screen>;
   if(studentAccess||hostProfile==='student')return <StudentScreen apiUrl={API_URL} onBack={()=>setStudentAccess(false)} onTeacherArea={hostProfile==='student'?()=>switchProfile('teacher'):undefined} />;
-  return <SafeAreaView style={ui.safe}><ScrollView contentContainerStyle={ui.container} keyboardShouldPersistTaps="handled">
-    <Text style={ui.eyebrow}>UFA PROVA</Text><Text style={ui.title}>Correção de avaliações</Text>
-    {booting ? <ActivityIndicator accessibilityLabel="Abrindo dados locais" /> : screen === 'login' ? <>
+  if (booting || screen === 'login') return <Screen>
+    <Header title="Correção de avaliações" />
+    {booting ? <Loading label="Abrindo dados locais" /> : <>
       <Pressable accessibilityRole="button" style={ui.secondary} onPress={()=>hostProfile==='teacher'?switchProfile('student'):setStudentAccess(true)}><Text style={ui.buttonText}>{hostProfile==='teacher'?'Sou aluno · abrir área do aluno':'Sou aluno · entrar ou criar conta'}</Text></Pressable>
       <Text style={ui.text}>{PERSISTENT_STORE ? 'Entre uma vez com internet. Depois, as escolas, avaliações e turmas já carregadas ficam disponíveis neste aparelho.' : 'No navegador, nada da escola fica salvo no aparelho: as fotos ficam só nesta aba até serem enviadas.'}</Text>
-      <TextInput style={ui.input} accessibilityLabel="E-mail" autoCapitalize="none" keyboardType="email-address" placeholder="E-mail" value={email} onChangeText={setEmail} />
-      <TextInput style={ui.input} accessibilityLabel="Senha" secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder="Senha" value={password} onChangeText={setPassword} />
+      <TextInput style={ui.input} accessibilityLabel="E-mail" autoCapitalize="none" keyboardType="email-address" placeholder="E-mail" placeholderTextColor={ui.small.color} value={email} onChangeText={setEmail} />
+      <TextInput style={ui.input} accessibilityLabel="Senha" secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder="Senha" placeholderTextColor={ui.small.color} value={password} onChangeText={setPassword} />
       <Pressable accessibilityRole="button" accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'} style={ui.passwordToggle} onPress={() => setShowPassword(value => !value)}><Text style={ui.linkText}>{showPassword ? 'Ocultar senha' : 'Mostrar senha'}</Text></Pressable>
       <Pressable accessibilityRole="button" disabled={loading} style={ui.passwordToggle} onPress={()=>{setError('');setMessage('');void requestPasswordReset(API_URL,email).then(setMessage,err=>setError(err instanceof Error?err.message:'Não foi possível pedir uma nova senha.'));}}><Text style={ui.linkText}>Esqueci minha senha</Text></Pressable>
-      {!!error && <Text style={ui.error}>{error}</Text>}
+      {!!error && <Notice tone="danger">{error}</Notice>}
       <Pressable disabled={loading || !store || !!googleAttempt} style={[ui.primary, (loading || !store || !!googleAttempt) && ui.disabled]} onPress={signIn}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={ui.primaryText}>Entrar</Text>}</Pressable>
       <Text style={ui.separator}>ou</Text>
       <Pressable accessibilityRole="button" disabled={loading || !store || !!googleAttempt} style={[ui.secondary, (loading || !store || !!googleAttempt) && ui.disabled]} onPress={googleSignIn}><Text style={ui.buttonText}>Entrar com Google</Text></Pressable>
-      {!!message && <Text accessibilityLiveRegion="polite" style={ui.small}>{message}</Text>}
+      {!!message && <Notice>{message}</Notice>}
       {!!googleAttempt && <>
         <Pressable disabled={loading} style={ui.secondary} onPress={() => { void finishGoogleSignIn(); }}><Text style={ui.buttonText}>Concluir entrada com Google</Text></Pressable>
         <Pressable disabled={loading} style={ui.passwordToggle} onPress={cancelGoogle}><Text style={ui.linkText}>Cancelar entrada com Google</Text></Pressable>
       </>}
       <Pressable accessibilityRole="button" disabled={loading||!!googleAttempt} style={ui.secondary} onPress={()=>setEducatorRegistration(true)}><Text style={ui.buttonText}>Criar conta de professor/coordenador</Text></Pressable>
       {!store && <Pressable style={ui.secondary} onPress={() => { void initialize(); }}><Text style={ui.buttonText}>Reabrir armazenamento local</Text></Pressable>}
-    </> : <>
-      <Text style={ui.small}>{account?.displayName} • {connected ? 'Conectado' : 'Sem conexão'}</Text>
-      <View style={ui.options}>
-        <Pressable style={ui.secondary} onPress={() => setScreen('records')}><Text style={ui.buttonText}>Digitalizações ({records.length})</Text></Pressable>
-        {unsent && <Text style={ui.small}>Há fotos aguardando envio. No navegador elas existem só nesta aba: mantenha-a aberta até o envio terminar.</Text>}
+    </>}
+  </Screen>;
+  const pending = operations.length;
+  const tabs: Tab<TeacherTab>[] = [
+    { key: 'correct', label: 'Corrigir', icon: 'scan' },
+    { key: 'records', label: 'Digitalizações', icon: 'documents', badge: pending },
+    { key: 'account', label: 'Conta', icon: 'person-circle' },
+  ];
+  const back = parentOf[screen] ? () => setScreen(parentOf[screen]!) : undefined;
+  const status = `${account?.displayName} • ${connected ? 'Conectado' : 'Sem conexão'}${syncing ? ' • Sincronizando…' : ''}`;
+  // Telas com cabeçalho próprio do App mostram a conta e a conexão nele.
+  const ownHeader = screen === 'home' || screen === 'assessments' || screen === 'account' || screen === 'records';
+  const notices = <>
+    {!connected && <Notice tone="warning" icon="cloud-offline">Sem internet: as capturas ficam salvas neste aparelho e são enviadas quando a conexão voltar.</Notice>}
+    {unsent && <Notice tone="warning">Há fotos aguardando envio. No navegador elas existem só nesta aba: mantenha-a aberta até o envio terminar.</Notice>}
+    {!!message && <Notice>{message}</Notice>}{!!error && <Notice tone="danger">{error}</Notice>}
+    {authExpired && <Pressable style={ui.secondary} onPress={() => { void signOut(); }}><Text style={ui.buttonText}>Entrar novamente para sincronizar</Text></Pressable>}
+  </>;
+  return <Screen
+    refreshing={refreshing}
+    onRefresh={screen === 'home' || screen === 'assessments' || screen === 'records' ? () => { void pullToRefresh(); } : undefined}
+    tabs={screen === 'scan' ? undefined : <TabBar tabs={tabs} current={tabOf(screen)} onChange={changeTab} />}
+  >
+    {!ownHeader && <Text style={ui.small}>{status}</Text>}
+    {!ownHeader && notices}
+    {screen === 'home' ? <>
+      <Header title="Selecione a escola" status={status} />{notices}
+      {!schools.length && <EmptyState icon="school" title="Nenhuma escola neste aparelho" text="Conecte-se para carregar seu cadastro." />}
+      {schools.map(item => <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{ selected: school?.id === item.id }} style={[ui.card, school?.id === item.id && ui.selected]} onPress={() => setSchool(item)}><Text style={ui.cardTitle}>{item.name}</Text><Text style={ui.small}>{[item.city, item.state].filter(Boolean).join(' • ')}</Text></Pressable>)}
+      <Pressable disabled={!school || loading} style={[ui.primary, (!school || loading) && ui.disabled]} onPress={() => { void continueSchool().catch(err => setError(err.message)); }}><Text style={ui.primaryText}>Corrigir cartões de respostas</Text></Pressable>
+    </> : screen === 'assessments' ? <>
+      <Header title="Selecione a aplicação da prova" subtitle={school?.name} onBack={back} status={status} />{notices}
+      {loading && <Loading label="Atualizando listas" />}
+      <Text style={ui.text}>Use o cartão de respostas com QR Code gerado no portal. Confira também a escola impressa no cartão.</Text>
+      {!applications.length && <EmptyState icon="calendar" title="Nenhuma aplicação disponível" text="No portal, abra Turmas e alunos, agende a avaliação para a turma e gere os cartões individuais."><Pressable style={ui.secondary} onPress={()=>void Linking.openURL(`${PORTAL_URL}/portal`).catch(()=>setError('Não foi possível abrir o portal.'))}><Text style={ui.buttonText}>Abrir portal para preparar os cartões</Text></Pressable></EmptyState>}
+      {applications.map(item=><Pressable key={item.id} accessibilityRole="radio" accessibilityState={{selected:selectedApplication?.id===item.id}} style={[ui.card,selectedApplication?.id===item.id&&ui.selected]} onPress={()=>{setSelectedApplication(item);setAssessment({id:item.assessmentId,title:item.title});setSchoolClass({id:item.classId,name:item.className});}}><Text style={ui.cardTitle}>{item.title}</Text><Text style={ui.text}>{[item.subject,item.className,`${item.students} alunos`].filter(Boolean).join(' · ')}</Text>{!!answerKeyLine(item)&&<Text style={ui.small}>{answerKeyLine(item)}</Text>}{!!answerKeyProblem(item)&&<Text style={ui.error}>{answerKeyProblem(item)}</Text>}</Pressable>)}
+      <Pressable disabled={!selectedApplication||loading||!!answerKeyProblem(selectedApplication)} style={[ui.primary,(!selectedApplication||loading||!!answerKeyProblem(selectedApplication))&&ui.disabled]} onPress={()=>setScreen('scan')}><Text style={ui.primaryText}>Continuar para captura</Text></Pressable>
+      <Pressable disabled={!selectedApplication||!connected} style={[ui.secondary,(!selectedApplication||!connected)&&ui.disabled]} onPress={()=>setScreen('results')}><Text style={ui.buttonText}>Revisar e autorizar resultados</Text></Pressable>
+      {!!selectedApplication&&!connected&&<Text style={ui.small}>A revisão e a autorização dos resultados exigem conexão.</Text>}
+    </> : screen === 'results' && selectedApplication && client ? <ResultsScreen key={selectedApplication.id} client={client} applicationId={selectedApplication.id} connected={connected} newId={Crypto.randomUUID}
+        onReviewScan={scanId=>{const local=records.find(record=>record.remoteId===scanId);if(!local)return false;setRecordId(local.id);setScreen('record');return true;}} onBack={()=>setScreen('assessments')} />
+    : screen === 'scan' && school && assessment && schoolClass ? <CaptureScreen applicationId={selectedApplication?.id} school={school} assessment={assessment} schoolClass={schoolClass} onConfirm={saveCapture} onBack={() => setScreen('assessments')} />
+    : screen === 'record' && selectedRecord && store ? <RecordScreen key={selectedRecord.id} record={selectedRecord} operations={operations} store={store} connected={connected} onSaved={reload} onRefresh={refreshSelected} onRetry={retrySelected} onNext={() => nextCapture(selectedRecord)} onBack={() => setScreen('records')} />
+    : screen === 'account' ? <>
+      <Header title="Conta" subtitle={account?.email} status={status} />{notices}
+      <View style={ui.card}>
+        <Text style={ui.cardTitle}>Sincronização</Text>
+        <Text style={ui.small}>{pending ? `${pending} alteração(ões) ainda não sincronizada(s).` : 'Tudo sincronizado neste aparelho.'}</Text>
         <Pressable disabled={!connected || syncing} style={[ui.secondary, (!connected || syncing) && ui.disabled]} onPress={() => { void sync(true); }}><Text style={ui.buttonText}>{syncing ? 'Sincronizando…' : 'Sincronizar agora'}</Text></Pressable>
-      </View>
-      {operations.length > 0 && <Text style={ui.small}>{operations.length} alteração(ões) ainda não sincronizada(s).</Text>}
-      {!!message && <Text style={ui.small}>{message}</Text>}{!!error && <Text style={ui.error}>{error}</Text>}
-      {authExpired && <Pressable style={ui.secondary} onPress={() => { void signOut(); }}><Text style={ui.buttonText}>Entrar novamente para sincronizar</Text></Pressable>}
-      {screen === 'home' ? <>
-        <Text style={ui.title}>Selecione a escola</Text>
-        {!schools.length && <Text style={ui.text}>Nenhuma escola disponível neste aparelho. Conecte-se para carregar seu cadastro.</Text>}
-        {schools.map(item => <Pressable key={item.id} style={[ui.card, school?.id === item.id && ui.selected]} onPress={() => setSchool(item)}><Text style={ui.cardTitle}>{item.name}</Text><Text style={ui.small}>{[item.city, item.state].filter(Boolean).join(' • ')}</Text></Pressable>)}
-        <Pressable disabled={!school || loading} style={[ui.primary, (!school || loading) && ui.disabled]} onPress={() => { void continueSchool().catch(err => setError(err.message)); }}><Text style={ui.primaryText}>Corrigir cartões de respostas</Text></Pressable>
         <Pressable disabled={!connected || loading} style={[ui.secondary, (!connected || loading) && ui.disabled]} onPress={() => { if (account && store) { setLoading(true); void loadCatalog(account, store).finally(() => setLoading(false)); } }}><Text style={ui.buttonText}>Atualizar listas</Text></Pressable>
-      </> : screen === 'assessments' ? <>
-        <Text style={ui.text}>{school?.name}</Text><Text style={ui.small}>Avaliações e turmas da instituição da sua conta.</Text>
-        {loading && <ActivityIndicator />}
-        <Text style={ui.title}>Selecione a aplicação da prova</Text>
-        <Text style={ui.text}>Use o cartão de respostas com QR Code gerado no portal. Confira também a escola impressa no cartão.</Text>
-        {!applications.length && <><Text style={ui.text}>Nenhuma aplicação disponível. No portal, abra Turmas e alunos, agende a avaliação para a turma e gere os cartões individuais.</Text><Pressable style={ui.secondary} onPress={()=>void Linking.openURL(`${PORTAL_URL}/portal`).catch(()=>setError('Não foi possível abrir o portal.'))}><Text style={ui.buttonText}>Abrir portal para preparar os cartões</Text></Pressable></>}
-        {applications.map(item=><Pressable key={item.id} accessibilityRole="radio" accessibilityState={{selected:selectedApplication?.id===item.id}} style={[ui.card,selectedApplication?.id===item.id&&ui.selected]} onPress={()=>{setSelectedApplication(item);setAssessment({id:item.assessmentId,title:item.title});setSchoolClass({id:item.classId,name:item.className});}}><Text style={ui.cardTitle}>{item.title}</Text><Text style={ui.text}>{[item.subject,item.className,`${item.students} alunos`].filter(Boolean).join(' · ')}</Text>{!!answerKeyLine(item)&&<Text style={ui.small}>{answerKeyLine(item)}</Text>}{!!answerKeyProblem(item)&&<Text style={ui.error}>{answerKeyProblem(item)}</Text>}</Pressable>)}
-        <Pressable disabled={!selectedApplication||loading||!!answerKeyProblem(selectedApplication)} style={[ui.primary,(!selectedApplication||loading||!!answerKeyProblem(selectedApplication))&&ui.disabled]} onPress={()=>setScreen('scan')}><Text style={ui.primaryText}>Continuar para captura</Text></Pressable>
-        <Pressable disabled={!selectedApplication||!connected} style={[ui.secondary,(!selectedApplication||!connected)&&ui.disabled]} onPress={()=>setScreen('results')}><Text style={ui.buttonText}>Revisar e autorizar resultados</Text></Pressable>
-        {!!selectedApplication&&!connected&&<Text style={ui.small}>A revisão e a autorização dos resultados exigem conexão.</Text>}
-        <Pressable style={ui.secondary} onPress={() => setScreen('home')}><Text style={ui.buttonText}>Trocar escola</Text></Pressable>
-      </> : screen === 'results' && selectedApplication && client ? <ResultsScreen key={selectedApplication.id} client={client} applicationId={selectedApplication.id} connected={connected} newId={Crypto.randomUUID}
-          onReviewScan={scanId=>{const local=records.find(record=>record.remoteId===scanId);if(!local)return false;setRecordId(local.id);setScreen('record');return true;}} onBack={()=>setScreen('assessments')} />
-      : screen === 'scan' && school && assessment && schoolClass ? <CaptureScreen applicationId={selectedApplication?.id} school={school} assessment={assessment} schoolClass={schoolClass} onConfirm={saveCapture} onBack={() => setScreen('assessments')} /> : screen === 'record' && selectedRecord && store ? <RecordScreen key={selectedRecord.id} record={selectedRecord} operations={operations} store={store} connected={connected} onSaved={reload} onRefresh={refreshSelected} onRetry={retrySelected} onNext={() => nextCapture(selectedRecord)} onBack={() => setScreen('records')} /> : <>
-        <Text style={ui.title}>Digitalizações salvas</Text>
-        {!records.length && <Text style={ui.text}>As folhas capturadas aparecerão aqui, mesmo sem conexão.</Text>}
-        {records.map(record => <Pressable key={record.id} style={ui.card} onPress={() => { setRecordId(record.id); setScreen('record'); }}><Text style={ui.cardTitle}>{record.sheet.assessmentTitle} • {record.sheet.className}</Text><Text style={ui.small}>{localStatus(record, operations)}</Text><Text style={ui.small}>{record.sheet.schoolName}</Text></Pressable>)}
-        <Pressable style={ui.primary} onPress={() => setScreen('home')}><Text style={ui.primaryText}>Nova captura</Text></Pressable>
-      </>}
+      </View>
       <Pressable style={ui.secondary} onPress={() => { void signOut(); }}><Text style={ui.buttonText}>Sair da conta</Text></Pressable>
       {account && connected && <DeleteAccount request={async (path, input) => createStudentClient(account.apiUrl, await sessionToken(account))(path, input)} onDeleted={async () => { await store?.clearOwner(account.owner); await signOut(); }} />}
+    </> : <>
+      <Header title="Digitalizações salvas" subtitle={pending ? `${pending} alteração(ões) aguardando sincronização.` : undefined} status={status} />{notices}
+      {!records.length && <EmptyState icon="documents" title="Nenhuma folha capturada" text="As folhas capturadas aparecerão aqui, mesmo sem conexão." />}
+      {records.map(record => <Pressable key={record.id} style={ui.card} onPress={() => { setRecordId(record.id); setScreen('record'); }}><Text style={ui.cardTitle}>{record.sheet.assessmentTitle} • {record.sheet.className}</Text><Text style={ui.small}>{localStatus(record, operations)}</Text><Text style={ui.small}>{record.sheet.schoolName}</Text></Pressable>)}
+      <Pressable style={ui.primary} onPress={() => changeTab('correct')}><Text style={ui.primaryText}>Nova captura</Text></Pressable>
     </>}
-  </ScrollView></SafeAreaView>;
+  </Screen>;
 }

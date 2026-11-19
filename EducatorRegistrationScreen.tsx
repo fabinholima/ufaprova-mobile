@@ -2,13 +2,12 @@ import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
-  ScrollView,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { ui } from "./ui-styles";
+import { useUi } from "./ui-styles";
+import { Header, Screen } from "./components";
 import { registerEducator } from "./educator-registration";
 import type { EducatorRegistration } from "./educator-registration";
 const initial: EducatorRegistration = {
@@ -36,6 +35,7 @@ export default function EducatorRegistrationScreen({
   onBack: () => void;
   onCreated: (email: string, role: "teacher" | "coordinator") => void;
 }) {
+  const ui = useUi();
   const [form, setForm] = useState<EducatorRegistration>(initial),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -79,10 +79,8 @@ export default function EducatorRegistrationScreen({
     }
   }
   return (
-    <SafeAreaView style={ui.safe}>
-      <ScrollView contentContainerStyle={ui.container} keyboardShouldPersistTaps="handled">
-        <Text style={ui.eyebrow}>UFA PROVA</Text>
-        <Text style={ui.title}>Criar conta de professor ou coordenador</Text>
+    <Screen>
+        <Header title="Criar conta de professor ou coordenador" />
         <Text style={ui.text}>
           Cadastre seu perfil e sua primeira escola. Depois, confirme o e-mail para entrar.
         </Text>
@@ -223,7 +221,6 @@ export default function EducatorRegistrationScreen({
         <Pressable disabled={busy} style={ui.secondary} onPress={onBack}>
           <Text style={ui.buttonText}>Já tenho conta · voltar para entrar</Text>
         </Pressable>
-      </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }

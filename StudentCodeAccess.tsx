@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { ui } from "./ui-styles";
+import { useUi } from "./ui-styles";
 import { createStudentClient, normalizeStudentCode } from "./student-api";
 import type { FirstAccessMatch } from "./student-api";
 
@@ -18,6 +18,7 @@ type Step = "login" | "code" | "confirm" | "password";
 // senha. No primeiro acesso (ou com um código novo, quando esqueceu a senha),
 // confere os dados do cadastro e cria a senha.
 export default function StudentCodeAccess({ apiUrl, busy, run, onSession, onEmail }: Props) {
+  const ui = useUi();
   const [step, setStep] = useState<Step>("login"),
     [code, setCode] = useState(""),
     [password, setPassword] = useState(""),

@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import type { CameraCapturedPicture } from "expo-camera";
-import { ui } from "./ui-styles";
+import { useUi } from "./ui-styles";
 import { createStudentClient } from "./student-api";
 import type { StudentProfile } from "./student-api";
 import { prepareSelfie } from "./prepare-selfie";
@@ -17,6 +17,7 @@ type Props = {
 };
 
 export default function StudentPhotoScreen({ apiUrl, token, profile, onSaved, onBack, backLabel = "Voltar" }: Props) {
+  const ui = useUi();
   const camera = useRef<CameraView>(null);
   const busy = useRef(false);
   const [permission, requestPermission] = useCameraPermissions();

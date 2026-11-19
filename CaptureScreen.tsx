@@ -3,6 +3,7 @@ import { ActivityIndicator, AppState, Image, Linking, Pressable, StyleSheet, Tex
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import type { CameraCapturedPicture } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import { useUi } from './ui-styles';
 
 export type CapturedSheet = {
   photo: CameraCapturedPicture;
@@ -25,6 +26,7 @@ type Props = {
 };
 
 export default function CaptureScreen({ applicationId, school, assessment, schoolClass, onConfirm, onBack }: Props) {
+  const ui = useUi();
   const camera = useRef<CameraView>(null);
   const busy = useRef(false);
   const mounted = useRef(true);
@@ -111,29 +113,29 @@ export default function CaptureScreen({ applicationId, school, assessment, schoo
 
   return (
     <>
-      <Text style={styles.title}>{assessment.title}</Text>
-      <Text style={styles.text}>{school.name} • {schoolClass.name}</Text>
+      <Text style={ui.title}>{assessment.title}</Text>
+      <Text style={ui.text}>{school.name} • {schoolClass.name}</Text>
       {photo ? (
         <>
           <Image source={{ uri: photo.uri }} style={styles.preview} resizeMode="contain" accessibilityLabel="Foto da folha de respostas" />
-          <Text style={styles.text}>Confira se a folha inteira está visível e se as marcações estão nítidas.</Text>
-          <Pressable disabled={saving} style={[styles.primary, saving && styles.disabled]} onPress={confirmPhoto}>
-            <Text style={styles.primaryText}>{saving ? 'Salvando no aparelho…' : 'Usar esta foto'}</Text>
+          <Text style={ui.text}>Confira se a folha inteira está visível e se as marcações estão nítidas.</Text>
+          <Pressable disabled={saving} style={[ui.primary, saving && ui.disabled]} onPress={confirmPhoto}>
+            <Text style={ui.primaryText}>{saving ? 'Salvando no aparelho…' : 'Usar esta foto'}</Text>
           </Pressable>
-          <Pressable disabled={saving} style={[styles.secondary, saving && styles.disabled]} onPress={retake}><Text style={styles.buttonText}>Refazer foto</Text></Pressable>
+          <Pressable disabled={saving} style={[ui.secondary, saving && ui.disabled]} onPress={retake}><Text style={ui.buttonText}>Refazer foto</Text></Pressable>
         </>
       ) : !permission ? (
         <ActivityIndicator style={styles.spacing} accessibilityLabel="Consultando permissão da câmera" />
       ) : !permission.granted ? (
         <>
-          <Text style={styles.text}>Permita o acesso à câmera para fotografar a folha de respostas.</Text>
-          <Pressable style={styles.primary} onPress={allowCamera}>
-            <Text style={styles.primaryText}>{permission.canAskAgain ? 'Permitir câmera' : 'Abrir configurações'}</Text>
+          <Text style={ui.text}>Permita o acesso à câmera para fotografar a folha de respostas.</Text>
+          <Pressable style={ui.primary} onPress={allowCamera}>
+            <Text style={ui.primaryText}>{permission.canAskAgain ? 'Permitir câmera' : 'Abrir configurações'}</Text>
           </Pressable>
         </>
       ) : (
         <>
-          <Text style={styles.text}>Coloque a folha em uma superfície plana e bem iluminada. Enquadre o cartão inteiro, incluindo o QR Code e todas as alternativas. Evite sombras e mantenha o celular paralelo ao papel.</Text>
+          <Text style={ui.text}>Coloque a folha em uma superfície plana e bem iluminada. Enquadre o cartão inteiro, incluindo o QR Code e todas as alternativas. Evite sombras e mantenha o celular paralelo ao papel.</Text>
           {active && !cameraFailed ? (
             <View style={styles.preview}>
               <CameraView key={attempt} ref={camera} style={StyleSheet.absoluteFill} facing="back" mode="picture" autofocus="on" enableTorch={torch}
@@ -141,39 +143,31 @@ export default function CaptureScreen({ applicationId, school, assessment, schoo
                 onMountError={() => { setReady(false); setCameraFailed(true); setError('Não foi possível abrir a câmera. Tente novamente.'); }} />
               <View pointerEvents="none" style={styles.guide} />
             </View>
-          ) : <Text style={styles.text}>{cameraFailed ? 'Câmera indisponível.' : 'Volte ao aplicativo para ativar a câmera.'}</Text>}
-          {!cameraFailed && <Pressable accessibilityRole="switch" accessibilityState={{checked:torch}} style={styles.secondary} onPress={()=>setTorch(value=>!value)}><Text style={styles.buttonText}>{torch?'Desligar lanterna':'Ligar lanterna'}</Text></Pressable>}
+          ) : <Text style={ui.text}>{cameraFailed ? 'Câmera indisponível.' : 'Volte ao aplicativo para ativar a câmera.'}</Text>}
+          {!cameraFailed && <Pressable accessibilityRole="switch" accessibilityState={{checked:torch}} style={ui.secondary} onPress={()=>setTorch(value=>!value)}><Text style={ui.buttonText}>{torch?'Desligar lanterna':'Ligar lanterna'}</Text></Pressable>}
           {cameraFailed ? (
-            <Pressable disabled={saving} style={[styles.secondary, saving && styles.disabled]} onPress={retake}><Text style={styles.buttonText}>Tentar novamente</Text></Pressable>
+            <Pressable disabled={saving} style={[ui.secondary, saving && ui.disabled]} onPress={retake}><Text style={ui.buttonText}>Tentar novamente</Text></Pressable>
           ) : (
             <Pressable accessibilityRole="button" accessibilityLabel="Fotografar folha de respostas" disabled={!ready || capturing || !active}
-              style={[styles.primary, (!ready || capturing || !active) && styles.disabled]} onPress={capture}>
-              {capturing ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{ready ? 'Fotografar folha' : 'Preparando câmera…'}</Text>}
+              style={[ui.primary, (!ready || capturing || !active) && ui.disabled]} onPress={capture}>
+              {capturing ? <ActivityIndicator color="#fff" /> : <Text style={ui.primaryText}>{ready ? 'Fotografar folha' : 'Preparando câmera…'}</Text>}
             </Pressable>
           )}
         </>
       )}
-      {!photo && <Pressable accessibilityRole="button" disabled={capturing} style={[styles.secondary, capturing && styles.disabled]} onPress={() => { void pickFromGallery(); }}>
-        <Text style={styles.buttonText}>Escolher foto da galeria</Text>
+      {!photo && <Pressable accessibilityRole="button" disabled={capturing} style={[ui.secondary, capturing && ui.disabled]} onPress={() => { void pickFromGallery(); }}>
+        <Text style={ui.buttonText}>Escolher foto da galeria</Text>
       </Pressable>}
-      {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-      <Pressable disabled={capturing || saving} style={[styles.secondary, (capturing || saving) && styles.disabled]} onPress={onBack}>
-        <Text style={styles.buttonText}>Voltar para avaliações</Text>
+      {!!error && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
+      <Pressable disabled={capturing || saving} style={[ui.secondary, (capturing || saving) && ui.disabled]} onPress={onBack}>
+        <Text style={ui.buttonText}>Voltar para avaliações</Text>
       </Pressable>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { color: '#0f172a', fontSize: 20, fontWeight: '700', marginTop: 24 },
-  text: { color: '#475569', fontSize: 16, lineHeight: 24, marginTop: 14 },
   preview: { width: '100%', aspectRatio: 3 / 4, backgroundColor: '#0f172a', marginTop: 20, borderRadius: 12, overflow: 'hidden' },
   guide: { position: 'absolute', top: '5%', bottom: '5%', left: '5%', right: '5%', borderWidth: 2, borderColor: '#fff', borderRadius: 4 },
-  primary: { backgroundColor: '#0f172a', borderRadius: 12, padding: 16, marginTop: 20 },
-  primaryText: { color: '#fff', textAlign: 'center', fontWeight: '700', fontSize: 16 },
-  secondary: { borderColor: '#cbd5e1', borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 16 },
-  buttonText: { color: '#0f172a', textAlign: 'center', fontWeight: '700', fontSize: 16 },
-  disabled: { opacity: 0.45 },
   spacing: { marginTop: 24 },
-  error: { color: '#b91c1c', marginTop: 12 },
 });

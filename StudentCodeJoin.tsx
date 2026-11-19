@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { ui } from "./ui-styles";
+import { useUi } from "./ui-styles";
 import { createStudentClient, normalizeStudentCode } from "./student-api";
 import type { StudentCodeClaim, StudentCodeMatch } from "./student-api";
 
@@ -20,6 +20,7 @@ function explain(error: unknown): never {
 }
 
 export default function StudentCodeJoin({ apiUrl, token, busy, run, onLinked }: Props) {
+  const ui = useUi();
   const [code, setCode] = useState(""),
     [match, setMatch] = useState<StudentCodeMatch | null>(null);
   const client = () => createStudentClient(apiUrl, token);

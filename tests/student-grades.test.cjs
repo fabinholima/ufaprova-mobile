@@ -64,7 +64,7 @@ test("pending manual review and missing scores never count toward averages or ev
 test("student sees the evolution chart, the trend and grades under each period", async (t) => {
   const { default: Grades } = load(path.join(__dirname, "../StudentGrades.tsx"), {
     "react-native": { StyleSheet: { create: (x) => x }, Text: "Text", View: "View" },
-    "./ui-styles": { ui: {} },
+    "./ui-styles": { ui: {}, useUi: () => ({ small: {} }) },
   });
   let component;
   await renderer.act(async () => {
@@ -111,7 +111,7 @@ test("home is organized by subject and a published evaluation opens questions, s
   };
   const { default: Grades } = load(path.join(__dirname, "../StudentGrades.tsx"), {
     "react-native": { StyleSheet: { create: (x) => x }, Text: "Text", View: "View", Pressable: "Pressable" },
-    "./ui-styles": { ui: {} },
+    "./ui-styles": { ui: {}, useUi: () => ({ small: {} }) },
   });
   let component;
   await renderer.act(async () => { component = renderer.create(React.createElement(Grades, { activities: list, request })); });
@@ -152,7 +152,7 @@ test("home is organized by subject and a published evaluation opens questions, s
 test("summary-only policy explains that questions were not released", async (t) => {
   const { default: Grades } = load(path.join(__dirname, "../StudentGrades.tsx"), {
     "react-native": { StyleSheet: { create: (x) => x }, Text: "Text", View: "View", Pressable: "Pressable" },
-    "./ui-styles": { ui: {} },
+    "./ui-styles": { ui: {}, useUi: () => ({ small: {} }) },
   });
   const item = { ...activity("s", "2026-05-05T12:00:00", "2", "3"), subject: "Química", resultId: "r-s", resultStatus: "published", percent: 66.67 };
   const request = async (url) => url.endsWith("skill-performance") ? [] : { ...item, releasePolicy: "summary", questions: [], skills: [], minSkillEvidence: 3, guidance: null };

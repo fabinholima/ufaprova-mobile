@@ -5,7 +5,7 @@ import type { Candidate, Label } from './scan-contract';
 import type { LocalRecord, OfflineStore, Operation } from './offline-store';
 import { isManual } from './manual-contract';
 import ManualReviewScreen from './ManualReviewScreen';
-import { ui } from './ui-styles';
+import { useUi } from './ui-styles';
 export function localStatus(record: LocalRecord, operations: Operation[]): string {
   const upload = operations.find(op => op.recordId === record.id && op.kind === 'upload');
   if (upload?.state === 'blocked') return 'Envio precisa de revisão';
@@ -17,6 +17,7 @@ export default function RecordScreen({ record, operations, store, connected, onS
   record: LocalRecord; operations: Operation[]; store: OfflineStore; connected: boolean;
   onSaved: () => Promise<void>; onRefresh: () => Promise<void>; onNext: () => void; onBack: () => void; onRetry: () => Promise<void>;
 }) {
+  const ui = useUi();
   const [candidateId, setCandidateId] = useState('');
   const [answers, setAnswers] = useState<Record<number, Label[]>>({});
   const [checked, setChecked] = useState(false);

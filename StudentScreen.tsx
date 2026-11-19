@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import {
-  ActivityIndicator,
   AppState,
   Image,
   Linking,
   Pressable,
-  SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -21,7 +18,10 @@ import StudentGrades from "./StudentGrades";
 import StudentCodeJoin from "./StudentCodeJoin";
 import StudentCodeAccess from "./StudentCodeAccess";
 import DeleteAccount from "./DeleteAccount";
-import { ui } from "./ui-styles";
+import { useUi } from "./ui-styles";
+import { useColors } from "./theme";
+import { EmptyState, Header, Loading, Notice, Screen, TabBar } from "./components";
+import type { Tab } from "./components";
 import { createStudentClient, verifyStudentSession, STUDENT_SESSION_KEY } from "./student-api";
 import type {
   StudentIdentity,
@@ -33,16 +33,34 @@ import type {
 import { startGoogleLogin, checkGoogleLogin } from "./google-login";
 import { requestPasswordReset } from "./password-reset";
 import type { GoogleAttempt } from "./google-login";
+type StudentTab = "grades" | "classes" | "profile";
+const studentTabs: Tab<StudentTab>[] = [
+  { key: "grades", label: "Notas", icon: "stats-chart" },
+  { key: "classes", label: "Turmas", icon: "people" },
+  { key: "profile", label: "Perfil", icon: "person-circle" },
+];
 const photoSkipKey = (studentId: string) => `ufaprova.studentPhotoSkipped.${studentId}`;
 // onTeacherArea: na web (aluno.<domínio>), leva à área do professor em vez de
 // voltar para a tela de entrada do aplicativo.
-export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUrl: string; onBack: () => void; onTeacherArea?: () => void }) {
+export default function StudentScreen({
+  apiUrl,
+  onBack,
+  onTeacherArea,
+}: {
+  apiUrl: string;
+  onBack: () => void;
+  onTeacherArea?: () => void;
+}) {
   const [scanning, setScanning] = useState(false),
     [activities, setActivities] = useState<StudentActivity[]>([]),
     [profiles, setProfiles] = useState<StudentProfile[] | null>([]),
     [photoProfile, setPhotoProfile] = useState<StudentProfile | null>(null),
     // Aberta sozinha ao entrar: "Agora não" fica guardado e não pergunta de novo.
-    [photoPrompt, setPhotoPrompt] = useState(false);
+    [photoPrompt, setPhotoPrompt] = useState(false),
+    [tab, setTab] = useState<StudentTab>("grades"),
+    [refreshing, setRefreshing] = useState(false);
+  const ui = useUi(),
+    colors = useColors();
   const [identity, setIdentity] = useState<StudentIdentity | null>(null),
     [token, setToken] = useState(""),
     [mode, setMode] = useState<"login" | "register" | "code">("login"),
@@ -79,7 +97,8 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
     setInvite(null);
     onBack();
   }
-  async function refresh(value = token) {
+  // first: logo após entrar, abre Turmas quando ainda não há notas para mostrar.
+  async function refresh(value = token, first = false) {
     const client = createStudentClient(apiUrl, value);
     const [list, own, profile] = await Promise.all([
       client<StudentRequest[]>("/api/class-join-requests/me"),
@@ -89,6 +108,7 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
     ]);
     setRequests(list);
     setActivities(own);
+    if (first) setTab(own.length ? "grades" : "classes");
     setProfiles(profile);
     return profile;
   }
@@ -100,7 +120,7 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
     setToken(value);
     setPassword("");
     setVisible(false);
-    const profile = await refresh(value);
+    const profile = await refresh(value, true);
     // Primeiro acesso com o cadastro sem foto: abre a câmera direto.
     const missing = profile?.find((p) => !p.selfieDataUrl);
     if (missing && !(await SecureStore.getItemAsync(photoSkipKey(missing.id)))) {
@@ -164,351 +184,406 @@ export default function StudentScreen({ apiUrl, onBack, onTeacherArea }: { apiUr
   );
   if (photoProfile)
     return (
-      <SafeAreaView style={ui.safe}>
-        <ScrollView contentContainerStyle={ui.container}>
-          <StudentPhotoScreen
-            apiUrl={apiUrl}
-            token={token}
-            profile={photoProfile}
-            backLabel={photoPrompt ? "Agora não" : "Voltar"}
-            onBack={() => {
-              if (photoPrompt) void SecureStore.setItemAsync(photoSkipKey(photoProfile.id), "1").catch(() => {});
-              setPhotoPrompt(false);
-              setPhotoProfile(null);
-            }}
-            onSaved={async () => {
-              setPhotoPrompt(false);
-              setPhotoProfile(null);
-              setMessage("Foto salva no seu cadastro.");
-              await refresh().catch(() => {});
-            }}
-          />
-        </ScrollView>
-      </SafeAreaView>
+      <Screen>
+        <StudentPhotoScreen
+          apiUrl={apiUrl}
+          token={token}
+          profile={photoProfile}
+          backLabel={photoPrompt ? "Agora não" : "Voltar"}
+          onBack={() => {
+            if (photoPrompt)
+              void SecureStore.setItemAsync(photoSkipKey(photoProfile.id), "1").catch(() => {});
+            setPhotoPrompt(false);
+            setPhotoProfile(null);
+          }}
+          onSaved={async () => {
+            setPhotoPrompt(false);
+            setPhotoProfile(null);
+            setMessage("Foto salva no seu cadastro.");
+            await refresh().catch(() => {});
+          }}
+        />
+      </Screen>
     );
   if (scanning)
     return (
-      <SafeAreaView style={ui.safe}>
-        <ScrollView contentContainerStyle={ui.container}>
-          <StudentInviteScanner
-            onClose={() => setScanning(false)}
-            onCode={(value) => {
-              setCode(value);
-              setInvite(null);
-              setScanning(false);
+      <Screen>
+        <StudentInviteScanner
+          onClose={() => setScanning(false)}
+          onCode={(value) => {
+            setCode(value);
+            setInvite(null);
+            setScanning(false);
+          }}
+        />
+      </Screen>
+    );
+  const pullToRefresh = () => {
+    setRefreshing(true);
+    void refresh()
+      .catch((e) => setMessage(e instanceof Error ? e.message : "Não foi possível atualizar."))
+      .finally(() => setRefreshing(false));
+  };
+  const pendingRequests = requests.filter((r) => r.status === "pending").length;
+  return (
+    <Screen
+      refreshing={refreshing}
+      onRefresh={identity ? pullToRefresh : undefined}
+      tabs={
+        identity ? (
+          <TabBar
+            tabs={studentTabs.map((t) => (t.key === "classes" ? { ...t, badge: pendingRequests } : t))}
+            current={tab}
+            onChange={(key) => {
+              setTab(key);
+              setMessage("");
             }}
           />
-        </ScrollView>
-      </SafeAreaView>
-    );
-  return (
-    <SafeAreaView style={ui.safe}>
-      <ScrollView contentContainerStyle={ui.container} keyboardShouldPersistTaps="handled">
-        <Text style={ui.eyebrow}>UFA PROVA · ALUNO</Text>
-        <Text style={ui.title}>
-          {identity
-            ? "Minhas turmas"
+        ) : undefined
+      }
+    >
+      <Header
+        title={
+          identity
+            ? tab === "grades"
+              ? "Minhas notas"
+              : tab === "classes"
+                ? "Minhas turmas"
+                : "Meu perfil"
             : mode === "register"
               ? "Criar conta de aluno"
               : mode === "code"
                 ? "Entrar com o código da escola"
-                : "Entrar como aluno"}
-        </Text>
-        {busy && <ActivityIndicator />}
-        {!identity && mode === "code" ? (
-          <>
-            <StudentCodeAccess
-              apiUrl={apiUrl}
-              busy={busy}
-              run={run}
-              onSession={async (result) => {
-                const value = loginToken(result);
-                if (!value) throw Error("Sessão inválida.");
-                await accept(value);
-              }}
-              onEmail={() => {
-                setMode("login");
+                : "Entrar como aluno"
+        }
+        subtitle={identity ? `Olá, ${identity.user.displayName}.` : undefined}
+      />
+      {busy && <Loading label="Carregando" />}
+      {!identity && mode === "code" ? (
+        <>
+          <StudentCodeAccess
+            apiUrl={apiUrl}
+            busy={busy}
+            run={run}
+            onSession={async (result) => {
+              const value = loginToken(result);
+              if (!value) throw Error("Sessão inválida.");
+              await accept(value);
+            }}
+            onEmail={() => {
+              setMode("login");
+              setMessage("");
+            }}
+          />
+          <Pressable style={ui.secondary} onPress={onTeacherArea ?? onBack}>
+            <Text style={ui.buttonText}>
+              {onTeacherArea ? "Sou professor · abrir área do professor" : "Voltar para acesso de professor"}
+            </Text>
+          </Pressable>
+        </>
+      ) : !identity ? (
+        <>
+          {mode === "login" && (
+            <Pressable
+              accessibilityRole="button"
+              style={ui.secondary}
+              onPress={() => {
+                setMode("code");
                 setMessage("");
               }}
-            />
-            <Pressable style={ui.secondary} onPress={onTeacherArea ?? onBack}>
-              <Text style={ui.buttonText}>{onTeacherArea ? "Sou professor · abrir área do professor" : "Voltar para acesso de professor"}</Text>
+            >
+              <Text style={ui.buttonText}>Não tenho e-mail · entrar com o código da escola</Text>
             </Pressable>
-          </>
-        ) : !identity ? (
-          <>
-            {mode === "login" && (
+          )}
+          {mode === "register" && (
+            <TextInput
+              style={ui.input}
+              accessibilityLabel="Seu nome"
+              placeholder="Seu nome"
+              value={name}
+              onChangeText={setName}
+            />
+          )}
+          <TextInput
+            style={ui.input}
+            accessibilityLabel="E-mail do aluno"
+            placeholder="E-mail"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+          />
+          <TextInput
+            style={ui.input}
+            accessibilityLabel="Senha do aluno"
+            placeholder={mode === "register" ? "Senha (pelo menos 10 caracteres)" : "Senha"}
+            secureTextEntry={!visible}
+            autoCapitalize="none"
+            value={password}
+            onChangeText={setPassword}
+          />
+          <Pressable
+            accessibilityRole="button"
+            style={ui.passwordToggle}
+            onPress={() => setVisible(!visible)}
+          >
+            <Text style={ui.linkText}>{visible ? "Ocultar senha" : "Mostrar senha"}</Text>
+          </Pressable>
+          {button(mode === "register" ? "Criar conta" : "Entrar", async () => {
+            const client = createStudentClient(apiUrl);
+            if (mode === "register") {
+              if (!name.trim() || password.length < 10)
+                throw Error("Informe seu nome e uma senha de pelo menos 10 caracteres.");
+              await client("/api/auth/student/register", {
+                displayName: name.trim(),
+                email: email.trim(),
+                password,
+              });
+              setMode("login");
+              setPassword("");
+              setMessage(
+                "Enviamos um link de confirmação para seu e-mail. Confirme-o no navegador e entre aqui.",
+              );
+            } else {
+              const result = await client<{ token?: string }>("/api/auth/login", {
+                email: email.trim(),
+                password,
+              });
+              const value = loginToken(result);
+              if (!value) throw Error("Sessão inválida.");
+              await accept(value);
+            }
+          })}
+          {!attempt &&
+            button(
+              "Entrar com Google",
+              async () => {
+                const value = await startGoogleLogin(apiUrl, "student");
+                current.current = value;
+                setAttempt(value);
+                try {
+                  await Linking.openURL(value.browserUrl);
+                  setMessage("Escolha sua conta Google e volte ao aplicativo.");
+                } catch (e) {
+                  current.current = null;
+                  setAttempt(null);
+                  throw e;
+                }
+              },
+              true,
+            )}
+          {attempt && (
+            <>
+              {button("Concluir entrada com Google", check, true)}
               <Pressable
-                accessibilityRole="button"
                 style={ui.secondary}
                 onPress={() => {
-                  setMode("code");
+                  current.current = null;
+                  setAttempt(null);
                   setMessage("");
                 }}
               >
-                <Text style={ui.buttonText}>Não tenho e-mail · entrar com o código da escola</Text>
+                <Text style={ui.buttonText}>Cancelar entrada com Google</Text>
               </Pressable>
+            </>
+          )}
+          <Pressable
+            style={ui.secondary}
+            onPress={() => {
+              setMode(mode === "login" ? "register" : "login");
+              setMessage("");
+            }}
+          >
+            <Text style={ui.buttonText}>{mode === "login" ? "Criar conta de aluno" : "Já tenho conta"}</Text>
+          </Pressable>
+          {mode === "login" &&
+            button(
+              "Esqueci minha senha",
+              async () => setMessage(await requestPasswordReset(apiUrl, email)),
+              true,
             )}
-            {mode === "register" && (
+          {button(
+            "Reenviar confirmação de e-mail",
+            async () => {
+              await createStudentClient(apiUrl)("/api/auth/resend-verification", {
+                email: email.trim(),
+              });
+              setMessage("Se houver uma confirmação pendente, enviaremos um novo link.");
+            },
+            true,
+          )}
+          <Pressable style={ui.secondary} onPress={onTeacherArea ?? onBack}>
+            <Text style={ui.buttonText}>
+              {onTeacherArea ? "Sou professor · abrir área do professor" : "Voltar para acesso de professor"}
+            </Text>
+          </Pressable>
+        </>
+      ) : (
+        <>
+          {tab === "grades" ? (
+            <>
+              {!activities.length && (
+                <EmptyState
+                  icon="stats-chart"
+                  title="Ainda não há notas"
+                  text="As notas aparecem aqui depois que o professor publicar os resultados das suas avaliações."
+                >
+                  <Pressable style={ui.secondary} onPress={() => setTab("classes")}>
+                    <Text style={ui.buttonText}>Ver minhas turmas</Text>
+                  </Pressable>
+                </EmptyState>
+              )}
+              <StudentGrades activities={activities} request={gradesRequest} />
+            </>
+          ) : tab === "classes" ? (
+            <>
+              <StudentCodeJoin
+                apiUrl={apiUrl}
+                token={token}
+                busy={busy}
+                run={run}
+                onLinked={async (claim) => {
+                  await refresh();
+                  setMessage(
+                    claim.classes.length
+                      ? `Conta vinculada. Turmas: ${claim.classes.map((c) => c.className).join(", ")}.`
+                      : "Conta vinculada ao seu cadastro.",
+                  );
+                }}
+              />
+              <Text style={ui.title}>Entrar com o código da turma</Text>
+              <Text style={ui.small}>
+                Digite o código da turma fornecido pelo professor. O vínculo depende da aprovação dele.
+              </Text>
               <TextInput
                 style={ui.input}
-                accessibilityLabel="Seu nome"
-                placeholder="Seu nome"
-                value={name}
-                onChangeText={setName}
+                accessibilityLabel="Código da turma"
+                placeholder="ABCD-EFGH"
+                maxLength={9}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                value={code}
+                onChangeText={(value) => {
+                  setCode(value.toUpperCase());
+                  setInvite(null);
+                }}
               />
-            )}
-            <TextInput
-              style={ui.input}
-              accessibilityLabel="E-mail do aluno"
-              placeholder="E-mail"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={email}
-              onChangeText={setEmail}
-            />
-            <TextInput
-              style={ui.input}
-              accessibilityLabel="Senha do aluno"
-              placeholder={mode === "register" ? "Senha (pelo menos 10 caracteres)" : "Senha"}
-              secureTextEntry={!visible}
-              autoCapitalize="none"
-              value={password}
-              onChangeText={setPassword}
-            />
-            <Pressable
-              accessibilityRole="button"
-              style={ui.passwordToggle}
-              onPress={() => setVisible(!visible)}
-            >
-              <Text style={ui.linkText}>{visible ? "Ocultar senha" : "Mostrar senha"}</Text>
-            </Pressable>
-            {button(mode === "register" ? "Criar conta" : "Entrar", async () => {
-              const client = createStudentClient(apiUrl);
-              if (mode === "register") {
-                if (!name.trim() || password.length < 10)
-                  throw Error("Informe seu nome e uma senha de pelo menos 10 caracteres.");
-                await client("/api/auth/student/register", {
-                  displayName: name.trim(),
-                  email: email.trim(),
-                  password,
-                });
-                setMode("login");
-                setPassword("");
-                setMessage(
-                  "Enviamos um link de confirmação para seu e-mail. Confirme-o no navegador e entre aqui.",
-                );
-              } else {
-                const result = await client<{ token?: string }>("/api/auth/login", {
-                  email: email.trim(),
-                  password,
-                });
-                const value = loginToken(result);
-                if (!value) throw Error("Sessão inválida.");
-                await accept(value);
-              }
-            })}
-            {!attempt &&
-              button(
-                "Entrar com Google",
+              {button("Conferir turma", async () =>
+                setInvite(
+                  await createStudentClient(apiUrl, token)<ClassInvite>("/api/class-invites/inspect", {
+                    code,
+                  }),
+                ),
+              )}
+              {invite && (
+                <View style={ui.card}>
+                  <Text style={ui.cardTitle}>{invite.schoolName}</Text>
+                  <Text style={ui.text}>{invite.className}</Text>
+                  <Text style={ui.small}>Professor: {invite.teacherName}</Text>
+                  {button("Solicitar participação", async () => {
+                    await createStudentClient(apiUrl, token)("/api/class-invites/request", { code });
+                    setInvite(null);
+                    await refresh();
+                    setMessage("Solicitação enviada. Aguarde a aprovação do professor.");
+                  })}
+                </View>
+              )}
+              <Pressable style={ui.secondary} onPress={() => setScanning(true)}>
+                <Text style={ui.buttonText}>Ler QR Code da turma</Text>
+              </Pressable>
+              <Text style={ui.title}>Meus vínculos e solicitações</Text>
+              {button(
+                "Atualizar solicitações",
                 async () => {
-                  const value = await startGoogleLogin(apiUrl, "student");
-                  current.current = value;
-                  setAttempt(value);
-                  try {
-                    await Linking.openURL(value.browserUrl);
-                    setMessage("Escolha sua conta Google e volte ao aplicativo.");
-                  } catch (e) {
-                    current.current = null;
-                    setAttempt(null);
-                    throw e;
-                  }
+                  await refresh();
                 },
                 true,
               )}
-            {attempt && (
-              <>
-                {button("Concluir entrada com Google", check, true)}
-                <Pressable
-                  style={ui.secondary}
-                  onPress={() => {
-                    current.current = null;
-                    setAttempt(null);
-                    setMessage("");
-                  }}
-                >
-                  <Text style={ui.buttonText}>Cancelar entrada com Google</Text>
-                </Pressable>
-              </>
-            )}
-            <Pressable
-              style={ui.secondary}
-              onPress={() => {
-                setMode(mode === "login" ? "register" : "login");
-                setMessage("");
-              }}
-            >
-              <Text style={ui.buttonText}>
-                {mode === "login" ? "Criar conta de aluno" : "Já tenho conta"}
-              </Text>
-            </Pressable>
-            {mode === "login" &&
-              button(
-                "Esqueci minha senha",
-                async () => setMessage(await requestPasswordReset(apiUrl, email)),
+              {!requests.length && (
+                <EmptyState
+                  icon="people"
+                  title="Nenhuma solicitação enviada"
+                  text="Use o código ou o QR Code da turma para pedir participação."
+                />
+              )}
+              {requests.map((r) => (
+                <View key={r.id} style={ui.card}>
+                  <Text style={ui.cardTitle}>{r.className}</Text>
+                  <Text style={ui.small}>{r.schoolName}</Text>
+                  <Text style={ui.text}>
+                    {r.status === "approved"
+                      ? "Vínculo aprovado"
+                      : r.status === "rejected"
+                        ? "Solicitação rejeitada"
+                        : "Aguardando aprovação"}
+                  </Text>
+                </View>
+              ))}
+            </>
+          ) : (
+            <>
+              <Text style={ui.title}>Meu cadastro</Text>
+              {profiles === null ? (
+                <Text style={ui.small}>Não foi possível carregar seu cadastro agora.</Text>
+              ) : !profiles.length ? (
+                <Text style={ui.small}>
+                  A foto do cadastro fica disponível depois que o professor aprovar seu vínculo.
+                </Text>
+              ) : (
+                profiles.map((p) => (
+                  <View key={p.id} style={ui.card}>
+                    {p.selfieDataUrl ? (
+                      <Image
+                        source={{ uri: p.selfieDataUrl }}
+                        style={[styles.avatar, { backgroundColor: colors.surfaceMuted }]}
+                        accessibilityLabel={`Foto de ${p.name}`}
+                      />
+                    ) : (
+                      <Text style={ui.small}>Cadastro sem foto</Text>
+                    )}
+                    <Text style={ui.cardTitle}>{p.name}</Text>
+                    {!!p.registration && <Text style={ui.small}>Matrícula: {p.registration}</Text>}
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={busy}
+                      style={[ui.secondary, busy && ui.disabled]}
+                      onPress={() => {
+                        setMessage("");
+                        setPhotoPrompt(false);
+                        setPhotoProfile(p);
+                      }}
+                    >
+                      <Text style={ui.buttonText}>{p.selfieDataUrl ? "Trocar foto" : "Adicionar foto"}</Text>
+                    </Pressable>
+                  </View>
+                ))
+              )}
+              {button(
+                "Sair",
+                async () => {
+                  await createStudentClient(apiUrl, token)("/api/auth/logout", {});
+                  await forgetSession();
+                },
                 true,
               )}
-            {button(
-              "Reenviar confirmação de e-mail",
-              async () => {
-                await createStudentClient(apiUrl)("/api/auth/resend-verification", {
-                  email: email.trim(),
-                });
-                setMessage("Se houver uma confirmação pendente, enviaremos um novo link.");
-              },
-              true,
-            )}
-            <Pressable style={ui.secondary} onPress={onTeacherArea ?? onBack}>
-              <Text style={ui.buttonText}>{onTeacherArea ? "Sou professor · abrir área do professor" : "Voltar para acesso de professor"}</Text>
-            </Pressable>
-          </>
-        ) : (
-          <>
-            <Text style={ui.text}>Olá, {identity.user.displayName}.</Text>
-            <StudentCodeJoin
-              apiUrl={apiUrl}
-              token={token}
-              busy={busy}
-              run={run}
-              onLinked={async (claim) => {
-                await refresh();
-                setMessage(
-                  claim.classes.length
-                    ? `Conta vinculada. Turmas: ${claim.classes.map((c) => c.className).join(", ")}.`
-                    : "Conta vinculada ao seu cadastro.",
-                );
-              }}
-            />
-            <Text style={ui.title}>Entrar com o código da turma</Text>
-            <Text style={ui.small}>
-              Digite o código da turma fornecido pelo professor. O vínculo depende da aprovação dele.
-            </Text>
-            <TextInput
-              style={ui.input}
-              accessibilityLabel="Código da turma"
-              placeholder="ABCD-EFGH"
-              maxLength={9}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              value={code}
-              onChangeText={(value) => {
-                setCode(value.toUpperCase());
-                setInvite(null);
-              }}
-            />
-            {button("Conferir turma", async () =>
-              setInvite(
-                await createStudentClient(apiUrl, token)<ClassInvite>(
-                  "/api/class-invites/inspect",
-                  { code },
-                ),
-              ),
-            )}
-            {invite && (
-              <View style={ui.card}>
-                <Text style={ui.cardTitle}>{invite.schoolName}</Text>
-                <Text style={ui.text}>{invite.className}</Text>
-                <Text style={ui.small}>Professor: {invite.teacherName}</Text>
-                {button("Solicitar participação", async () => {
-                  await createStudentClient(apiUrl, token)("/api/class-invites/request", { code });
-                  setInvite(null);
-                  await refresh();
-                  setMessage("Solicitação enviada. Aguarde a aprovação do professor.");
-                })}
-              </View>
-            )}
-            <Pressable style={ui.secondary} onPress={() => setScanning(true)}>
-              <Text style={ui.buttonText}>Ler QR Code da turma</Text>
-            </Pressable>
-            <Text style={ui.title}>Meus vínculos e solicitações</Text>
-            {button("Atualizar solicitações", async () => { await refresh(); }, true)}
-            {!requests.length && <Text style={ui.small}>Nenhuma solicitação enviada.</Text>}
-            {requests.map((r) => (
-              <View key={r.id} style={ui.card}>
-                <Text style={ui.cardTitle}>{r.className}</Text>
-                <Text style={ui.small}>{r.schoolName}</Text>
-                <Text style={ui.text}>
-                  {r.status === "approved"
-                    ? "Vínculo aprovado"
-                    : r.status === "rejected"
-                      ? "Solicitação rejeitada"
-                      : "Aguardando aprovação"}
-                </Text>
-              </View>
-            ))}
-            <Text style={ui.title}>Meu cadastro</Text>
-            {profiles === null ? (
-              <Text style={ui.small}>Não foi possível carregar seu cadastro agora.</Text>
-            ) : !profiles.length ? (
-              <Text style={ui.small}>
-                A foto do cadastro fica disponível depois que o professor aprovar seu vínculo.
-              </Text>
-            ) : (
-              profiles.map((p) => (
-                <View key={p.id} style={ui.card}>
-                  {p.selfieDataUrl ? (
-                    <Image
-                      source={{ uri: p.selfieDataUrl }}
-                      style={styles.avatar}
-                      accessibilityLabel={`Foto de ${p.name}`}
-                    />
-                  ) : (
-                    <Text style={ui.small}>Cadastro sem foto</Text>
-                  )}
-                  <Text style={ui.cardTitle}>{p.name}</Text>
-                  {!!p.registration && <Text style={ui.small}>Matrícula: {p.registration}</Text>}
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={busy}
-                    style={[ui.secondary, busy && ui.disabled]}
-                    onPress={() => {
-                      setMessage("");
-                      setPhotoPrompt(false);
-                      setPhotoProfile(p);
-                    }}
-                  >
-                    <Text style={ui.buttonText}>
-                      {p.selfieDataUrl ? "Trocar foto" : "Adicionar foto"}
-                    </Text>
-                  </Pressable>
-                </View>
-              ))
-            )}
-            <StudentGrades activities={activities} request={gradesRequest} />
-            {button(
-              "Sair",
-              async () => {
-                await createStudentClient(apiUrl, token)("/api/auth/logout", {});
-                await forgetSession();
-              },
-              true,
-            )}
-            <DeleteAccount
-              request={(path, input) => createStudentClient(apiUrl, token)(path, input)}
-              onDeleted={forgetSession}
-            />
-          </>
-        )}
-        {!!message && (
-          <Text accessibilityLiveRegion="polite" style={ui.text}>
-            {message}
-          </Text>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+              <DeleteAccount
+                request={(path, input) => createStudentClient(apiUrl, token)(path, input)}
+                onDeleted={forgetSession}
+              />
+            </>
+          )}
+        </>
+      )}
+      {!!message && <Notice>{message}</Notice>}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  avatar: { width: 96, height: 96, borderRadius: 48, marginBottom: 12, backgroundColor: "#e2e8f0" },
+  avatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    marginBottom: 12,
+  },
 });

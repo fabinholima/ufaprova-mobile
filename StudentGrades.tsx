@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { ui } from "./ui-styles";
+import { useUi } from "./ui-styles";
+import { useColors } from "./theme";
 import type { SkillIndicator, StudentActivity, StudentResultDetail, SubjectSkills } from "./student-api";
 import { countSummary, evolution, groupByPeriod, groupBySubject, percentOf, trend } from "./student-grades";
 
@@ -27,10 +28,12 @@ function result(activity: StudentActivity & { percent: number | null }) {
 }
 
 function Skills({ skills, minimum }: { skills: SkillIndicator[]; minimum: number }) {
+  const ui = useUi(),
+    c = useColors();
   if (!skills.length) return null;
   return (
     <>
-      <Text style={styles.period}>Habilidades da BNCC</Text>
+      <Text style={[styles.period, { color: c.text }]}>Habilidades da BNCC</Text>
       <Text style={ui.small}>
         Acertos nas questões ligadas a cada habilidade. Com menos de {minimum} questões, o resultado ainda não permite
         conclusões.
@@ -50,6 +53,8 @@ function Skills({ skills, minimum }: { skills: SkillIndicator[]; minimum: number
 }
 
 function Detail({ detail, onBack }: { detail: StudentResultDetail; onBack: () => void }) {
+  const ui = useUi(),
+    c = useColors();
   const summary = countSummary(detail);
   return (
     <>
@@ -68,7 +73,7 @@ function Detail({ detail, onBack }: { detail: StudentResultDetail; onBack: () =>
           <Text style={ui.text}>{detail.guidance.text}</Text>
         </View>
       )}
-      <Text style={styles.period}>Questões</Text>
+      <Text style={[styles.period, { color: c.text }]}>Questões</Text>
       {!detail.questions.length ? (
         <Text style={ui.small}>O professor liberou apenas o resumo desta avaliação.</Text>
       ) : (
@@ -95,6 +100,8 @@ function Detail({ detail, onBack }: { detail: StudentResultDetail; onBack: () =>
 }
 
 function Evolution({ activities }: { activities: StudentActivity[] }) {
+  const ui = useUi(),
+    c = useColors();
   const points = evolution(activities).slice(-8);
   if (points.length < 2)
     return <Text style={ui.small}>A evolução aparece quando houver pelo menos duas avaliações com nota.</Text>;
@@ -108,11 +115,11 @@ function Evolution({ activities }: { activities: StudentActivity[] }) {
             accessible
             accessibilityLabel={`${point.title}, ${shortDate(point.date)}: ${number(point.percent)}%`}
           >
-            <Text style={styles.value}>{Math.round(point.percent)}%</Text>
+            <Text style={[styles.value, { color: c.text }]}>{Math.round(point.percent)}%</Text>
             <View style={styles.track}>
-              <View style={[styles.bar, { height: `${Math.max(point.percent, 2)}%` }]} />
+              <View style={[styles.bar, { backgroundColor: c.accent, height: `${Math.max(point.percent, 2)}%` }]} />
             </View>
-            <Text style={styles.date}>{shortDate(point.date)}</Text>
+            <Text style={[styles.date, { color: c.textMuted }]}>{shortDate(point.date)}</Text>
           </View>
         ))}
       </View>
@@ -124,6 +131,8 @@ function Evolution({ activities }: { activities: StudentActivity[] }) {
 // Tela inicial do aluno organizada por disciplina. Só aparecem resultados
 // publicados pelo professor; não há comparação com colegas.
 export default function StudentGrades({ activities, request }: { activities: StudentActivity[]; request?: Request }) {
+  const ui = useUi(),
+    c = useColors();
   const subjects = groupBySubject(activities);
   const [open, setOpen] = useState<string | null>(null);
   const [detail, setDetail] = useState<StudentResultDetail | null>(null);
@@ -185,7 +194,7 @@ export default function StudentGrades({ activities, request }: { activities: Stu
     <>
       <Text style={ui.title}>{current.subject}</Text>
       {current.average !== null && <Text style={ui.text}>Média de acertos: {number(current.average)}%</Text>}
-      <Text style={styles.period}>Minha evolução</Text>
+      <Text style={[styles.period, { color: c.text }]}>Minha evolução</Text>
       <Evolution activities={current.activities} />
       {change && (
         <Text style={ui.text}>
@@ -200,7 +209,7 @@ export default function StudentGrades({ activities, request }: { activities: Stu
       <Text style={ui.title}>Notas por período</Text>
       {periods.map((period) => (
         <View key={period.key}>
-          <Text style={styles.period}>{period.label}</Text>
+          <Text style={[styles.period, { color: c.text }]}>{period.label}</Text>
           <Text style={ui.small}>
             {period.average === null ? "Sem notas neste período" : `Média: ${number(period.average)}%`}
           </Text>
@@ -244,9 +253,9 @@ export default function StudentGrades({ activities, request }: { activities: Stu
 const styles = StyleSheet.create({
   chart: { flexDirection: "row", alignItems: "flex-end", gap: 8, height: 160 },
   column: { flex: 1, alignItems: "center", height: "100%" },
-  value: { color: "#0f172a", fontSize: 12, fontWeight: "700" },
+  value: { fontSize: 12, fontWeight: "700" },
   track: { flex: 1, width: "70%", justifyContent: "flex-end", marginVertical: 4 },
-  bar: { backgroundColor: "#2563eb", borderRadius: 4, width: "100%" },
-  date: { color: "#64748b", fontSize: 11 },
-  period: { color: "#0f172a", fontSize: 18, fontWeight: "700", marginTop: 20 },
+  bar: { borderRadius: 4, width: "100%" },
+  date: { fontSize: 11 },
+  period: { fontSize: 18, fontWeight: "700", marginTop: 20 },
 });

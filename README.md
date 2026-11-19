@@ -12,6 +12,14 @@ MVP móvel de captura e correção, separado do frontend web.
 
 A validação com fotos reais e aparelhos Android/iOS continua necessária. A leitura OMR depende do worker do servidor; não acontece no celular sem conexão.
 
+## Navegação e visual
+
+- **Professor:** abas Corrigir · Digitalizações · Conta. A aba Digitalizações mostra quantas alterações faltam sincronizar; sincronização, atualizar listas, sair e excluir conta ficam em Conta.
+- **Aluno:** abas Notas · Turmas · Perfil. Logo após entrar, abre Notas; sem notas ainda, abre Turmas. A aba Turmas mostra quantas solicitações aguardam aprovação.
+- O botão voltar do Android volta à tela anterior (aplicação → escola, captura/resultados → aplicação, registro → digitalizações).
+- No celular, puxar a lista para baixo atualiza (escolas e aplicações, digitalizações, dados do aluno).
+- Tema claro/escuro segue o aparelho. Cores e espaçamentos ficam em `theme.ts`; estilos em `ui-styles.ts` (`useUi()`); componentes comuns (tela, cabeçalho, abas, estado vazio, avisos) em `components.tsx`.
+
 ## Desenvolvimento
 
 ```bash

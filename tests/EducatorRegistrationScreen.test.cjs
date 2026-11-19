@@ -21,7 +21,7 @@ test("registration lets coordinators choose stages and only returns to login aft
       TextInput: "TextInput",
       View: "View",
     },
-    "./ui-styles": { ui: {} },
+    "./ui-styles": { ui: {}, useUi: () => ({ small: {} }) },
     "./educator-registration": {
       registerEducator: async (url, form) => {
         sent = form;

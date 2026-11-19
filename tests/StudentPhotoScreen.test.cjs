@@ -39,7 +39,7 @@ async function setup(t, { permission = { granted: true, canAskAgain: true }, fet
       CameraView: Camera,
       useCameraPermissions: () => [permission, async () => (asked++, permission)],
     },
-    "./ui-styles": { ui: {} },
+    "./ui-styles": { ui: {}, useUi: () => ({ small: {} }) },
     "./prepare-selfie": {
       prepareSelfie: prepareSelfie || (async () => "data:image/jpeg;base64,aGVsbG8="),
     },

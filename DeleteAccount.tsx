@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { ui } from "./ui-styles";
+import { useUi } from "./ui-styles";
 
 type Props = {
   // POST autenticado na API com a sessão atual.
@@ -12,6 +12,7 @@ type Props = {
 // Exclusão da conta pelo próprio usuário (exigência da Play Store). A API apaga
 // os dados pessoais e os acessos; o que é da escola continua com a escola.
 export default function DeleteAccount({ request, onDeleted }: Props) {
+  const ui = useUi();
   const [open, setOpen] = useState(false),
     [password, setPassword] = useState(""),
     [confirm, setConfirm] = useState(""),

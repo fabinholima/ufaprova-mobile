@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Linking, Pressable, Text, View } from "react-native";
-import { ui } from "./ui-styles";
+import { useUi } from "./ui-styles";
 import { inviteCodeFromQr } from "./student-api";
 export default function StudentInviteScanner({
   onCode,
@@ -10,6 +10,7 @@ export default function StudentInviteScanner({
   onCode: (code: string) => void;
   onClose: () => void;
 }) {
+  const ui = useUi();
   const [permission, requestPermission] = useCameraPermissions();
   const handled = useRef(false);
   const [error, setError] = useState("");

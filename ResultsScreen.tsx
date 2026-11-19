@@ -7,7 +7,7 @@ import {
 import FollowupForm from './FollowupForm';
 import type { AnnulledPolicy, ApplicationResults, AuthorizeResponse, ReleasePolicy, ResultDetail, StudentResult } from './results-contract';
 import type { ScanClient } from './scan-api';
-import { ui } from './ui-styles';
+import { useUi } from './ui-styles';
 
 type Client = Pick<ScanClient, 'applicationResults' | 'resultDetail' | 'authorize' | 'saveResultSettings' | 'scanImage' | 'saveFollowup'>;
 type Mode = 'list' | 'confirm' | 'detail' | 'settings' | 'followup';
@@ -18,6 +18,7 @@ export default function ResultsScreen({ client, applicationId, connected, newId,
   client: Client; applicationId: string; connected: boolean; newId: () => string;
   onReviewScan?: (scanId: string) => boolean; onBack: () => void;
 }) {
+  const ui = useUi();
   const [data, setData] = useState<ApplicationResults | null>(null);
   const [view, setView] = useState<Mode>('list');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -209,6 +210,7 @@ function summarizeOutcome(response: AuthorizeResponse): string {
 function SettingsForm({ client, data, connected, onDone }: {
   client: Pick<ScanClient, 'saveResultSettings'>; data: ApplicationResults; connected: boolean; onDone: (message?: string) => Promise<void>;
 }) {
+  const ui = useUi();
   const settings = data.application.settings;
   const [minimum, setMinimum] = useState(settings.minExpectedPercent == null ? '' : String(settings.minExpectedPercent));
   const [release, setRelease] = useState<ReleasePolicy>(settings.releasePolicy);

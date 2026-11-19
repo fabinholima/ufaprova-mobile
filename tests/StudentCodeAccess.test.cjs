@@ -19,7 +19,7 @@ async function setup(t, fetchImpl) {
   };
   const { default: Access } = load(path.join(__dirname, "../StudentCodeAccess.tsx"), {
     "react-native": { Pressable: "Pressable", Text: "Text", TextInput: "TextInput", View: "View" },
-    "./ui-styles": { ui: {} },
+    "./ui-styles": { ui: {}, useUi: () => ({ small: {} }) },
   });
   const run = async (fn) => {
     error = "";
