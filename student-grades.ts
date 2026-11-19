@@ -120,3 +120,45 @@ export function countSummary(activity: StudentActivity): string | null {
   if (activity.annulledCount) parts.push(`${activity.annulledCount} anulada(s)`);
   return parts.join(" · ");
 }
+
+// Faixas usadas pela instituição nos relatórios (services/renderer/report-contract.mjs).
+// A meta mínima é "Adequado": o portal do professor também destaca itens abaixo de 60%.
+export const SKILL_GOAL = 60;
+export type SkillBand = "consolidated" | "adequate" | "developing" | "intervention";
+export const BAND_LABEL: Record<SkillBand, string> = {
+  consolidated: "Consolidado",
+  adequate: "Adequado",
+  developing: "Em desenvolvimento",
+  intervention: "Requer intervenção",
+};
+export function skillBand(percent: number): SkillBand {
+  if (percent >= 80) return "consolidated";
+  if (percent >= SKILL_GOAL) return "adequate";
+  if (percent >= 40) return "developing";
+  return "intervention";
+}
+
+// Habilidades com evidência suficiente e abaixo da meta, da menor para a maior.
+export function skillsToReinforce<T extends { percent: number; sufficientEvidence: boolean }>(skills: T[]): T[] {
+  return skills.filter((skill) => skill.sufficientEvidence && skill.percent < SKILL_GOAL).sort((a, b) => a.percent - b.percent);
+}
+
+export type StudentSummary = {
+  last: EvolutionPoint | null;
+  period: { label: string; average: number } | null;
+  difference: number | null;
+  pending: number;
+};
+// Resumo do topo da aba Notas: última nota publicada, média do período mais
+// recente com notas e variação em relação ao período anterior.
+export function studentSummary(activities: StudentActivity[]): StudentSummary {
+  const points = evolution(activities);
+  const periods = groupByPeriod(activities);
+  const latest = periods.find((p) => p.key !== "sem-data" && p.average !== null);
+  return {
+    last: points[points.length - 1] ?? null,
+    period: latest ? { label: latest.label, average: latest.average! } : null,
+    difference: trend(periods)?.difference ?? null,
+    pending: activities.filter((activity) => activity.requiresManualReview).length,
+  };
+}

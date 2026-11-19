@@ -1,9 +1,24 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useUi } from "./ui-styles";
-import { useColors } from "./theme";
+import { useColors, radius, space } from "./theme";
+import type { Palette } from "./theme";
 import type { SkillIndicator, StudentActivity, StudentResultDetail, SubjectSkills } from "./student-api";
-import { countSummary, evolution, groupByPeriod, groupBySubject, percentOf, trend } from "./student-grades";
+import {
+  BAND_LABEL,
+  SKILL_GOAL,
+  countSummary,
+  evolution,
+  groupByPeriod,
+  groupBySubject,
+  percentOf,
+  skillBand,
+  skillsToReinforce,
+  studentSummary,
+  trend,
+} from "./student-grades";
+import type { SkillBand } from "./student-grades";
 
 const number = (value: number) => String(value).replace(".", ",");
 const shortDate = (date: Date) =>
@@ -27,28 +42,105 @@ function result(activity: StudentActivity & { percent: number | null }) {
   }`;
 }
 
+const bandColor = (c: Palette, band: SkillBand) =>
+  ({ consolidated: c.success, adequate: c.accent, developing: c.warning, intervention: c.danger })[band];
+
+// Uma barra por habilidade, com a meta mínima (Adequado, 60%) marcada. Só
+// entra em "para reforçar" o que tem questões suficientes para concluir algo.
 function Skills({ skills, minimum }: { skills: SkillIndicator[]; minimum: number }) {
   const ui = useUi(),
     c = useColors();
   if (!skills.length) return null;
+  const reinforce = skillsToReinforce(skills);
   return (
     <>
       <Text style={[styles.period, { color: c.text }]}>Habilidades da BNCC</Text>
       <Text style={ui.small}>
-        Acertos nas questões ligadas a cada habilidade. Com menos de {minimum} questões, o resultado ainda não permite
-        conclusões.
+        Acertos nas questões ligadas a cada habilidade. A linha marca a meta de {SKILL_GOAL}%. Com menos de {minimum}{" "}
+        questões, o resultado ainda não permite conclusões.
       </Text>
-      {skills.map((skill) => (
-        <View key={skill.code} style={ui.card}>
-          <Text style={ui.cardTitle}>{skill.code}</Text>
-          {!!skill.description && <Text style={ui.small}>{skill.description}</Text>}
-          <Text style={ui.text}>
-            {skill.correct} de {skill.questions} questão(ões) · {number(skill.percent)}%
+      {reinforce.length > 0 && (
+        <View style={[styles.notice, { backgroundColor: c.warningSoft }]}>
+          <Ionicons name="flag" size={18} color={c.warning} />
+          <Text style={{ color: c.warning, flex: 1, fontSize: 14, lineHeight: 20 }}>
+            Para reforçar: {reinforce.map((skill) => `${skill.code} (${number(skill.percent)}%)`).join(", ")}
           </Text>
-          {!skill.sufficientEvidence && <Text style={ui.small}>Poucas questões para avaliar esta habilidade.</Text>}
         </View>
-      ))}
+      )}
+      {skills.map((skill) => {
+        const band = skillBand(skill.percent),
+          color = skill.sufficientEvidence ? bandColor(c, band) : c.textMuted;
+        return (
+          <View key={skill.code} style={ui.card}>
+            <View style={styles.skillHead}>
+              <Text style={[ui.cardTitle, { flexShrink: 1 }]}>{skill.code}</Text>
+              {skill.sufficientEvidence && <Text style={[styles.band, { color }]}>{BAND_LABEL[band]}</Text>}
+            </View>
+            {!!skill.description && <Text style={ui.small}>{skill.description}</Text>}
+            <View
+              accessibilityRole="progressbar"
+              accessibilityValue={{ min: 0, max: 100, now: Math.round(skill.percent) }}
+              style={[styles.skillTrack, { backgroundColor: c.surfaceMuted }]}
+            >
+              <View style={{ width: `${Math.min(100, skill.percent)}%`, height: "100%", backgroundColor: color, borderRadius: radius.pill }} />
+              <View style={[styles.goal, { left: `${SKILL_GOAL}%`, backgroundColor: c.text }]} />
+            </View>
+            <Text style={ui.text}>
+              {skill.correct} de {skill.questions} questão(ões) · {number(skill.percent)}%
+            </Text>
+            {!skill.sufficientEvidence && <Text style={ui.small}>Poucas questões para avaliar esta habilidade.</Text>}
+          </View>
+        );
+      })}
     </>
+  );
+}
+
+// Resumo do topo: última nota, média do período e tendência.
+function Summary({ activities }: { activities: StudentActivity[] }) {
+  const ui = useUi(),
+    c = useColors();
+  const { last, period, difference, pending } = studentSummary(activities);
+  if (!last && !pending) return null;
+  const up = difference !== null && difference > 0,
+    down = difference !== null && difference < 0;
+  const trendColor = up ? c.success : down ? c.danger : c.textMuted;
+  return (
+    <View style={[ui.card, styles.summary]}>
+      <View style={styles.tile}>
+        <Text style={[styles.tileLabel, { color: c.textMuted }]}>Última nota</Text>
+        <Text style={[styles.big, { color: c.text }]}>{last ? `${number(Math.round(last.percent))}%` : "—"}</Text>
+        {!!last && (
+          <Text numberOfLines={2} style={[styles.tileNote, { color: c.textMuted }]}>
+            {last.title} · {shortDate(last.date)}
+          </Text>
+        )}
+      </View>
+      <View style={[styles.tile, styles.tileBorder, { borderColor: c.border }]}>
+        <Text style={[styles.tileLabel, { color: c.textMuted }]}>Média do período</Text>
+        <Text style={[styles.big, { color: c.text }]}>{period ? `${number(Math.round(period.average))}%` : "—"}</Text>
+        {!!period && (
+          <Text numberOfLines={2} style={[styles.tileNote, { color: c.textMuted }]}>
+            {period.label.split(" · ")[0]}
+          </Text>
+        )}
+      </View>
+      <View style={[styles.tile, styles.tileBorder, { borderColor: c.border }]}>
+        <Text style={[styles.tileLabel, { color: c.textMuted }]}>Tendência</Text>
+        <View style={styles.trendRow}>
+          <Ionicons name={up ? "trending-up" : down ? "trending-down" : "remove"} size={22} color={trendColor} />
+          <Text style={[styles.big, { color: trendColor, fontSize: 20 }]}>
+            {difference === null ? "—" : `${up ? "+" : ""}${number(difference)}`}
+          </Text>
+        </View>
+        <Text numberOfLines={2} style={[styles.tileNote, { color: c.textMuted }]}>
+          {difference === null ? "Precisa de dois períodos" : "pontos vs. anterior"}
+        </Text>
+      </View>
+      {pending > 0 && (
+        <Text style={[ui.small, styles.pending]}>{pending} avaliação(ões) aguardando revisão do professor.</Text>
+      )}
+    </View>
   );
 }
 
@@ -99,28 +191,68 @@ function Detail({ detail, onBack }: { detail: StudentResultDetail; onBack: () =>
   );
 }
 
+const CHART_HEIGHT = 150;
+
+// Gráfico de linha feito com Views (sem biblioteca nativa): pontos em
+// percentual da largura e segmentos girados entre eles. A linha tracejada é a
+// meta mínima usada pela instituição.
 function Evolution({ activities }: { activities: StudentActivity[] }) {
   const ui = useUi(),
     c = useColors();
+  const [width, setWidth] = useState(0);
   const points = evolution(activities).slice(-8);
   if (points.length < 2)
     return <Text style={ui.small}>A evolução aparece quando houver pelo menos duas avaliações com nota.</Text>;
+  const step = 100 / points.length,
+    xOf = (index: number) => step * index + step / 2,
+    yOf = (percent: number) => CHART_HEIGHT - (Math.min(100, Math.max(0, percent)) / 100) * CHART_HEIGHT;
   return (
     <View style={ui.card}>
-      <View style={styles.chart}>
-        {points.map((point) => (
+      <View style={styles.chart} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+        {[0, 50, 100].map((line) => (
+          <View key={line} style={[styles.grid, { top: yOf(line), borderColor: c.border }]} />
+        ))}
+        <View style={[styles.grid, styles.goalLine, { top: yOf(SKILL_GOAL), borderColor: c.warning }]} />
+        <Text style={[styles.goalLabel, { top: yOf(SKILL_GOAL) - 16, color: c.warning }]}>meta {SKILL_GOAL}%</Text>
+        {width > 0 &&
+          points.slice(1).map((point, index) => {
+            const x1 = (xOf(index) / 100) * width,
+              y1 = yOf(points[index].percent),
+              x2 = (xOf(index + 1) / 100) * width,
+              y2 = yOf(point.percent);
+            const length = Math.hypot(x2 - x1, y2 - y1);
+            return (
+              <View
+                key={`line-${point.id}`}
+                style={{
+                  position: "absolute",
+                  left: (x1 + x2) / 2 - length / 2,
+                  top: (y1 + y2) / 2 - 1.5,
+                  width: length,
+                  height: 3,
+                  borderRadius: 2,
+                  backgroundColor: c.accent,
+                  transform: [{ rotate: `${Math.atan2(y2 - y1, x2 - x1)}rad` }],
+                }}
+              />
+            );
+          })}
+        {points.map((point, index) => (
           <View
             key={point.id}
-            style={styles.column}
             accessible
             accessibilityLabel={`${point.title}, ${shortDate(point.date)}: ${number(point.percent)}%`}
+            style={[styles.point, { left: `${xOf(index)}%`, top: yOf(point.percent) - 6, borderColor: c.accent, backgroundColor: c.surface }]}
           >
             <Text style={[styles.value, { color: c.text }]}>{Math.round(point.percent)}%</Text>
-            <View style={styles.track}>
-              <View style={[styles.bar, { backgroundColor: c.accent, height: `${Math.max(point.percent, 2)}%` }]} />
-            </View>
-            <Text style={[styles.date, { color: c.textMuted }]}>{shortDate(point.date)}</Text>
           </View>
+        ))}
+      </View>
+      <View style={styles.dates}>
+        {points.map((point) => (
+          <Text key={point.id} style={[styles.date, { color: c.textMuted }]}>
+            {shortDate(point.date)}
+          </Text>
         ))}
       </View>
       <Text style={ui.small}>Percentual de acerto nas últimas avaliações, da mais antiga para a mais recente.</Text>
@@ -169,6 +301,7 @@ export default function StudentGrades({ activities, request }: { activities: Stu
   if (!current)
     return (
       <>
+        <Summary activities={activities} />
         <Text style={ui.title}>Minhas disciplinas</Text>
         {subjects.map((group) => (
           <Pressable
@@ -192,6 +325,7 @@ export default function StudentGrades({ activities, request }: { activities: Stu
     subjectSkills = skills?.find((entry) => entry.subject === current.subject);
   return (
     <>
+      {subjects.length === 1 && <Summary activities={activities} />}
       <Text style={ui.title}>{current.subject}</Text>
       {current.average !== null && <Text style={ui.text}>Média de acertos: {number(current.average)}%</Text>}
       <Text style={[styles.period, { color: c.text }]}>Minha evolução</Text>
@@ -251,11 +385,26 @@ export default function StudentGrades({ activities, request }: { activities: Stu
 }
 
 const styles = StyleSheet.create({
-  chart: { flexDirection: "row", alignItems: "flex-end", gap: 8, height: 160 },
-  column: { flex: 1, alignItems: "center", height: "100%" },
-  value: { fontSize: 12, fontWeight: "700" },
-  track: { flex: 1, width: "70%", justifyContent: "flex-end", marginVertical: 4 },
-  bar: { borderRadius: 4, width: "100%" },
-  date: { fontSize: 11 },
+  chart: { height: CHART_HEIGHT, marginTop: 24, marginBottom: 4 },
+  grid: { position: "absolute", left: 0, right: 0, borderTopWidth: 1 },
+  goalLine: { borderStyle: "dashed" },
+  goalLabel: { position: "absolute", right: 0, fontSize: 11, fontWeight: "600" },
+  point: { position: "absolute", width: 12, height: 12, marginLeft: -6, borderRadius: 6, borderWidth: 3, alignItems: "center" },
+  value: { position: "absolute", bottom: 12, width: 44, textAlign: "center", fontSize: 12, fontWeight: "700" },
+  dates: { flexDirection: "row", marginTop: 6 },
+  date: { flex: 1, textAlign: "center", fontSize: 11 },
   period: { fontSize: 18, fontWeight: "700", marginTop: 20 },
+  summary: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 0 },
+  tile: { flex: 1, paddingHorizontal: space.md, minWidth: 0 },
+  tileBorder: { borderLeftWidth: 1 },
+  tileLabel: { fontSize: 12, fontWeight: "600", textTransform: "uppercase" },
+  big: { fontSize: 26, fontWeight: "800", marginTop: 4 },
+  tileNote: { fontSize: 12, marginTop: 2 },
+  trendRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4, minHeight: 34 },
+  pending: { width: "100%", paddingHorizontal: space.md, marginTop: space.sm },
+  notice: { flexDirection: "row", gap: space.sm, alignItems: "flex-start", borderRadius: radius.md, padding: space.md, marginTop: space.md },
+  skillHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.sm },
+  band: { fontSize: 12, fontWeight: "700" },
+  skillTrack: { height: 10, borderRadius: radius.pill, marginTop: space.sm, marginBottom: 4, overflow: "visible" },
+  goal: { position: "absolute", top: -3, width: 2, height: 16, marginLeft: -1 },
 });

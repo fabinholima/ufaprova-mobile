@@ -163,3 +163,46 @@ test("summary-only policy explains that questions were not released", async (t) 
   assert(text(component.root).includes("O professor liberou apenas o resumo desta avaliação."));
   assert(!text(component.root).includes("Orientação do professor"));
 });
+
+test("summary shows the latest grade, the latest period average and the trend", () => {
+  const { studentSummary, skillBand, skillsToReinforce } = load(path.join(__dirname, "../student-grades.ts"));
+  const summary = studentSummary(sample);
+  assert.equal(summary.last.id, "c");
+  assert.equal(summary.last.percent, 90);
+  assert.deepEqual(summary.period, { label: "2º período · abr–jun 2026", average: 90 });
+  assert.equal(summary.difference, 20);
+  assert.equal(summary.pending, 1);
+  assert.deepEqual(studentSummary([sample[0]]), {
+    last: studentSummary([sample[0]]).last, period: { label: "1º período · jan–mar 2026", average: 60 }, difference: null, pending: 0,
+  });
+  assert.deepEqual([85, 60, 59.9, 40, 39].map(skillBand), ["consolidated", "adequate", "developing", "developing", "intervention"]);
+  const skills = [
+    { code: "A", percent: 55, sufficientEvidence: true },
+    { code: "B", percent: 30, sufficientEvidence: false },
+    { code: "C", percent: 20, sufficientEvidence: true },
+    { code: "D", percent: 70, sufficientEvidence: true },
+  ];
+  assert.deepEqual(skillsToReinforce(skills).map((s) => s.code), ["C", "A"], "sem evidência suficiente não entra");
+});
+
+test("skills render with their band and the ones below the goal are flagged", async (t) => {
+  const { default: Grades } = load(path.join(__dirname, "../StudentGrades.tsx"), {
+    "react-native": { StyleSheet: { create: (x) => x }, Text: "Text", View: "View", Pressable: "Pressable" },
+    "./ui-styles": { ui: {}, useUi: () => ({ small: {} }) },
+  });
+  const item = { ...activity("s", "2026-05-05T12:00:00", "2", "3"), subject: "Química", resultId: "r-s", resultStatus: "published", percent: 66.67 };
+  const request = async () => [{ subject: "Química", assessments: 1, minSkillEvidence: 3, skills: [
+    { code: "EM13CNT101", description: null, questions: 4, correct: 1, percent: 25, sufficientEvidence: true },
+    { code: "EM13CNT102", description: null, questions: 4, correct: 4, percent: 100, sufficientEvidence: true },
+    { code: "EM13CNT103", description: null, questions: 1, correct: 0, percent: 0, sufficientEvidence: false },
+  ] }];
+  let component;
+  await renderer.act(async () => { component = renderer.create(React.createElement(Grades, { activities: [item], request })); });
+  t.after(() => renderer.act(() => component.unmount()));
+  const all = text(component.root);
+  assert(all.includes("Última nota67%"));
+  assert(all.includes("Para reforçar: EM13CNT101 (25%)"));
+  assert(all.includes("EM13CNT101Requer intervenção"));
+  assert(all.includes("EM13CNT102Consolidado"));
+  assert(!all.includes("EM13CNT103 ("), "habilidade sem evidência não é destacada");
+});
