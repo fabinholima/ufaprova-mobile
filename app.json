@@ -26,7 +26,13 @@
           "microphonePermission": false
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-notifications",
+        {
+          "color": "#1d4ed8"
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true

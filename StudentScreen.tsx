@@ -32,6 +32,8 @@ import type {
 } from "./student-api";
 import { startGoogleLogin, checkGoogleLogin } from "./google-login";
 import { requestPasswordReset } from "./password-reset";
+import { disablePush, enablePush, onResultOpened, syncPush } from "./push";
+import type { PushStatus } from "./push";
 import type { GoogleAttempt } from "./google-login";
 type StudentTab = "grades" | "classes" | "profile";
 const studentTabs: Tab<StudentTab>[] = [
@@ -58,7 +60,10 @@ export default function StudentScreen({
     // Aberta sozinha ao entrar: "Agora não" fica guardado e não pergunta de novo.
     [photoPrompt, setPhotoPrompt] = useState(false),
     [tab, setTab] = useState<StudentTab>("grades"),
-    [refreshing, setRefreshing] = useState(false);
+    [refreshing, setRefreshing] = useState(false),
+    [push, setPush] = useState<PushStatus>("unsupported"),
+    // Avaliação a abrir depois de tocar num aviso de nota nova.
+    [openResultId, setOpenResultId] = useState<string | null>(null);
   const ui = useUi(),
     colors = useColors();
   const [identity, setIdentity] = useState<StudentIdentity | null>(null),
@@ -121,6 +126,10 @@ export default function StudentScreen({
     setPassword("");
     setVisible(false);
     const profile = await refresh(value, true);
+    // Sem pedir permissão aqui: só renova o registro de quem já ativou.
+    void syncPush(createStudentClient(apiUrl, value))
+      .then(setPush)
+      .catch(() => setPush("unsupported"));
     // Primeiro acesso com o cadastro sem foto: abre a câmera direto.
     const missing = profile?.find((p) => !p.selfieDataUrl);
     if (missing && !(await SecureStore.getItemAsync(photoSkipKey(missing.id)))) {
@@ -143,6 +152,39 @@ export default function StudentScreen({
       current.current = null;
     };
   }, [apiUrl]);
+  useEffect(() => {
+    if (!identity) return;
+    return onResultOpened((resultId) => {
+      setTab("grades");
+      setOpenResultId(resultId);
+      void refresh().catch(() => {});
+    });
+  }, [identity]);
+  async function turnOnPush() {
+    const status = await enablePush(createStudentClient(apiUrl, token));
+    setPush(status);
+    setMessage(
+      status === "on"
+        ? "Pronto: você recebe um aviso quando o professor publicar uma nota."
+        : status === "denied"
+          ? "Os avisos estão bloqueados. Libere as notificações do UFA Prova nas configurações do celular."
+          : "",
+    );
+  }
+  const pushCard = () => (
+    <View style={ui.card}>
+      <Text style={ui.cardTitle}>Aviso de nota nova</Text>
+      <Text style={ui.small}>
+        {push === "on"
+          ? "Ativado neste celular. O aviso mostra só o nome da avaliação; a nota aparece aqui no aplicativo."
+          : push === "denied"
+            ? "Bloqueado nas configurações do celular."
+            : "Receba um aviso quando o professor publicar uma nota. O aviso mostra só o nome da avaliação."}
+      </Text>
+      {push === "ask" && button("Ativar avisos", turnOnPush)}
+      {push === "denied" && button("Abrir configurações", () => Linking.openSettings(), true)}
+    </View>
+  );
   async function check() {
     const value = current.current;
     if (!value || checking.current) return;
@@ -433,7 +475,13 @@ export default function StudentScreen({
                   </Pressable>
                 </EmptyState>
               )}
-              <StudentGrades activities={activities} request={gradesRequest} />
+              {push === "ask" && requests.some((r) => r.status === "approved") && pushCard()}
+              <StudentGrades
+                activities={activities}
+                request={gradesRequest}
+                openResultId={openResultId}
+                onOpened={() => setOpenResultId(null)}
+              />
             </>
           ) : tab === "classes" ? (
             <>
@@ -558,9 +606,13 @@ export default function StudentScreen({
                   </View>
                 ))
               )}
+              {push !== "unsupported" && pushCard()}
               {button(
                 "Sair",
                 async () => {
+                  // Este celular para de receber avisos desta conta.
+                  await disablePush(createStudentClient(apiUrl, token)).catch(() => {});
+                  setPush("unsupported");
                   await createStudentClient(apiUrl, token)("/api/auth/logout", {});
                   await forgetSession();
                 },

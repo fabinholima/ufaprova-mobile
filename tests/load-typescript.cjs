@@ -14,8 +14,17 @@ const nativeDefaults = {
   },
   '@expo/vector-icons/Ionicons': { __esModule: true, default: () => null },
   'expo-status-bar': { StatusBar: () => null },
+  // Sem Platform.OS nos testes, push.ts responde "unsupported" e não chama estes.
+  'expo-notifications': {
+    setNotificationHandler: () => {},
+    AndroidImportance: { HIGH: 4 },
+    getLastNotificationResponseAsync: async () => null,
+    addNotificationResponseReceivedListener: () => ({ remove() {} }),
+  },
 };
 const reactNativeDefaults = {
+  // Nem android nem ios: avisos de nota ficam desligados (push.ts).
+  Platform: { OS: 'test', select: (options) => options.default },
   useColorScheme: () => 'light',
   BackHandler: { addEventListener: () => ({ remove() {} }) },
   Vibration: { vibrate: () => {} },

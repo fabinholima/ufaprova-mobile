@@ -20,6 +20,7 @@ A validação com fotos reais e aparelhos Android/iOS continua necessária. A le
 - **Fila de revisão:** em Digitalizações, o filtro "Precisam de revisão" mostra envios bloqueados, marcações para conferir, leituras que falharam e discursivas pendentes; dentro de uma delas, "Próxima para revisar" abre a seguinte.
 - **Aluno:** abas Notas · Turmas · Perfil. Logo após entrar, abre Notas; sem notas ainda, abre Turmas. A aba Turmas mostra quantas solicitações aguardam aprovação.
 - **Notas do aluno:** no topo, o resumo com a última nota, a média do período mais recente e a tendência em pontos frente ao período anterior (e quantas avaliações aguardam revisão). Dentro da disciplina, a evolução aparece em linha com a meta de 60% tracejada, e cada habilidade da BNCC vira uma barra com a faixa da instituição (Consolidado ≥ 80%, Adequado ≥ 60%, Em desenvolvimento ≥ 40%, Requer intervenção) e a marca da meta. "Para reforçar" lista só as habilidades abaixo de 60% com questões suficientes. As faixas são as dos relatórios (`services/renderer/report-contract.mjs` no repositório da API).
+- **Aviso de nota nova (Android e iOS):** a permissão só é pedida quando o aluno toca em "Ativar avisos" (cartão na aba Notas, com turma aprovada, e em Perfil). Depois disso o aparelho é registrado na API a cada entrada. O aviso mostra só a disciplina e o nome da avaliação; tocar nele abre a avaliação no aplicativo. "Sair" remove o aparelho. Na web não há aviso. Envio pelo push do Expo (gratuito); no Android ele exige as credenciais do Firebase Cloud Messaging no EAS (veja abaixo).
 - O botão voltar do Android volta à tela anterior (aplicação → escola, captura/resultados → aplicação, registro → digitalizações).
 - No celular, puxar a lista para baixo atualiza (escolas e aplicações, digitalizações, dados do aluno).
 - Tema claro/escuro segue o aparelho. Cores e espaçamentos ficam em `theme.ts`; estilos em `ui-styles.ts` (`useUi()`); componentes comuns (tela, cabeçalho, abas, estado vazio, avisos) em `components.tsx`.
@@ -34,6 +35,17 @@ npx expo start
 ```
 
 A API padrão é `https://api.ufaprova.com.br`. Configure `EXPO_PUBLIC_API_URL` para usar outra API. Contas, fotos na fila e listas salvas com o endereço anterior (`https://ufaprova-api.onrender.com`, a mesma API) passam para o novo endereço ao abrir o app, sem novo login. O projeto usa Expo SDK 58. Use uma versão compatível do Expo Go ou uma compilação de desenvolvimento. Permissões alteradas em `app.json` exigem recompilar o aplicativo instalado.
+
+## Aviso de nota nova: configuração do Android
+
+O push do Expo entrega no Android pelo Firebase Cloud Messaging (FCM). O FCM é gratuito, mas o projeto precisa de credenciais próprias. Sem elas, o aplicativo funciona normalmente e só não registra o aparelho.
+
+1. Crie um projeto no [Firebase](https://console.firebase.google.com) (plano Spark, gratuito) e adicione um app Android com o pacote `br.com.ufaprova.app`.
+2. Baixe o `google-services.json` para a raiz deste repositório e acrescente `"googleServicesFile": "./google-services.json"` em `expo.android` no `app.json`.
+3. Em Configurações do projeto → Contas de serviço, gere uma chave privada (JSON). Envie-a ao EAS com `eas credentials` (Android → Google Service Account → push notifications, FCM V1). A chave fica no EAS, não no repositório.
+4. Gere um novo build (`eas build -p android`). Permissões e plugins novos só valem num aplicativo recompilado.
+
+No iOS, o EAS cria a chave de push da Apple durante o build, com a conta de desenvolvedor.
 
 ## Versão web (PWA)
 

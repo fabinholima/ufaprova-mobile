@@ -12,6 +12,7 @@ import {
   evolution,
   groupByPeriod,
   groupBySubject,
+  NO_SUBJECT,
   percentOf,
   skillBand,
   skillsToReinforce,
@@ -262,7 +263,18 @@ function Evolution({ activities }: { activities: StudentActivity[] }) {
 
 // Tela inicial do aluno organizada por disciplina. Só aparecem resultados
 // publicados pelo professor; não há comparação com colegas.
-export default function StudentGrades({ activities, request }: { activities: StudentActivity[]; request?: Request }) {
+// openResultId: avaliação aberta por um aviso de nota nova.
+export default function StudentGrades({
+  activities,
+  request,
+  openResultId,
+  onOpened,
+}: {
+  activities: StudentActivity[];
+  request?: Request;
+  openResultId?: string | null;
+  onOpened?: () => void;
+}) {
   const ui = useUi(),
     c = useColors();
   const subjects = groupBySubject(activities);
@@ -271,6 +283,16 @@ export default function StudentGrades({ activities, request }: { activities: Stu
   const [skills, setSkills] = useState<SubjectSkills[] | null>(null);
   const [error, setError] = useState("");
   const current = subjects.length === 1 ? subjects[0] : subjects.find((group) => group.subject === open);
+
+  useEffect(() => {
+    if (!openResultId || !request) return;
+    const target = activities.find((item) => item.resultId === openResultId && item.resultStatus === "published");
+    // A lista ainda pode estar sendo atualizada; tenta de novo quando chegar.
+    if (!target) return;
+    onOpened?.();
+    setOpen(target.subject?.trim() || NO_SUBJECT);
+    void openResult(target);
+  }, [openResultId, activities, request]);
 
   useEffect(() => {
     if (!request || !current || skills) return;
