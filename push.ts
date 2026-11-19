@@ -8,7 +8,11 @@ import * as Notifications from "expo-notifications";
 type Request = <T>(path: string, input?: object) => Promise<T>;
 export type PushStatus = "unsupported" | "ask" | "denied" | "on";
 
-export const PUSH_SUPPORTED = Platform.OS === "android" || Platform.OS === "ios";
+// No Android o aviso depende do Firebase (FCM). Enquanto o build não tiver o
+// google-services.json, EXPO_PUBLIC_PUSH_ANDROID fica desligado e o cartão
+// "Ativar avisos" não aparece.
+export const PUSH_SUPPORTED =
+  Platform.OS === "ios" || (Platform.OS === "android" && process.env.EXPO_PUBLIC_PUSH_ANDROID === "on");
 
 // Com o aplicativo aberto, o aviso aparece no topo e a lista é atualizada.
 Notifications.setNotificationHandler({

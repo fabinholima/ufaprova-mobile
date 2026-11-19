@@ -1,3 +1,4 @@
+process.env.EXPO_PUBLIC_PUSH_ANDROID = "on";
 const test = require("node:test"),
   assert = require("node:assert/strict"),
   path = require("node:path"),

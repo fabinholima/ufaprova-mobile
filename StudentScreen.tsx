@@ -161,7 +161,13 @@ export default function StudentScreen({
     });
   }, [identity]);
   async function turnOnPush() {
-    const status = await enablePush(createStudentClient(apiUrl, token));
+    let status: PushStatus;
+    try {
+      status = await enablePush(createStudentClient(apiUrl, token));
+    } catch {
+      setMessage("Não foi possível ativar os avisos agora. Tente novamente mais tarde.");
+      return;
+    }
     setPush(status);
     setMessage(
       status === "on"

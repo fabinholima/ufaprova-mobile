@@ -38,12 +38,13 @@ A API padrão é `https://api.ufaprova.com.br`. Configure `EXPO_PUBLIC_API_URL` 
 
 ## Aviso de nota nova: configuração do Android
 
-O push do Expo entrega no Android pelo Firebase Cloud Messaging (FCM). O FCM é gratuito, mas o projeto precisa de credenciais próprias. Sem elas, o aplicativo funciona normalmente e só não registra o aparelho.
+O push do Expo entrega no Android pelo Firebase Cloud Messaging (FCM). O FCM é gratuito, mas o projeto precisa de credenciais próprias. Sem elas, o aplicativo funciona normalmente e o cartão "Ativar avisos" não aparece no Android.
 
 1. Crie um projeto no [Firebase](https://console.firebase.google.com) (plano Spark, gratuito) e adicione um app Android com o pacote `br.com.ufaprova.app`.
 2. Baixe o `google-services.json` para a raiz deste repositório e acrescente `"googleServicesFile": "./google-services.json"` em `expo.android` no `app.json`.
 3. Em Configurações do projeto → Contas de serviço, gere uma chave privada (JSON). Envie-a ao EAS com `eas credentials` (Android → Google Service Account → push notifications, FCM V1). A chave fica no EAS, não no repositório.
-4. Gere um novo build (`eas build -p android`). Permissões e plugins novos só valem num aplicativo recompilado.
+4. Em `eas.json`, acrescente `"EXPO_PUBLIC_PUSH_ANDROID": "on"` em `build.base.env`. Sem isso o cartão "Ativar avisos" fica oculto no Android.
+5. Gere um novo build (`eas build -p android`). Permissões e plugins novos só valem num aplicativo recompilado.
 
 No iOS, o EAS cria a chave de push da Apple durante o build, com a conta de desenvolvedor.
 
