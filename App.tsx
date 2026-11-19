@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, BackHandler, Linking, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, AppState, BackHandler, Linking, Pressable, Text, TextInput, Vibration, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import NetInfo from '@react-native-community/netinfo';
@@ -23,20 +23,22 @@ import type { LocalRecord, OfflineStore, Operation } from './offline-store';
 import { createSynchronizer, refreshRecord } from './offline-sync';
 import { prepareImage } from './prepare-image';
 import { ScanApiError } from './scan-api';
-import {answerKeyLine,answerKeyProblem,parseApplications} from './application-contract';
+import {answerKeyProblem,parseApplications} from './application-contract';
 import type {CorrectionApplication} from './application-contract';
 import { useUi } from './ui-styles';
-import { EmptyState, Header, Loading, Notice, Screen, TabBar } from './components';
+import { Chip, EmptyState, Header, Loading, Notice, ProgressBar, Screen, TabBar } from './components';
+import TeacherHome from './TeacherHome';
+import { applicationProgress, needsAttention } from './teacher-dashboard';
 import type { Tab } from './components';
 import { startGoogleLogin, checkGoogleLogin } from './google-login';
 import { requestPasswordReset } from './password-reset';
 import type { GoogleAttempt } from './google-login';
 
-type Screen = 'login' | 'home' | 'assessments' | 'scan' | 'records' | 'record' | 'results' | 'account';
+type Screen = 'login' | 'home' | 'schools' | 'scan' | 'records' | 'record' | 'results' | 'account';
 type TeacherTab = 'correct' | 'records' | 'account';
 const tabOf = (screen: Screen): TeacherTab => screen === 'records' || screen === 'record' ? 'records' : screen === 'account' ? 'account' : 'correct';
 // Tela anterior de cada tela, para o botão voltar do Android e o "Voltar" do cabeçalho.
-const parentOf: Partial<Record<Screen, Screen>> = { assessments: 'home', scan: 'assessments', results: 'assessments', record: 'records' };
+const parentOf: Partial<Record<Screen, Screen>> = { schools: 'home', scan: 'home', results: 'home', record: 'records' };
 type School = { id: string; name: string; city?: string; state?: string };
 type Assessment = { id: string; title: string; subject?: string; grade?: string };
 type SchoolClass = { id: string; name: string; grade?: string; schoolYear?: number };
@@ -80,9 +82,14 @@ function TeacherApp() {
   const [records, setRecords] = useState<LocalRecord[]>([]);
   const [operations, setOperations] = useState<Operation[]>([]);
   const [recordId, setRecordId] = useState<string | null>(null);
-  // Última tela da aba Corrigir, para voltar a ela ao trocar de aba.
-  const correctScreen = useRef<Screen>('home');
   const [refreshing, setRefreshing] = useState(false);
+  // Última aplicação usada, para "Continuar de onde parou".
+  const [lastApplicationId, setLastApplicationId] = useState<string | null>(null);
+  const [recordsFilter, setRecordsFilter] = useState<'all' | 'attention'>('all');
+  // Cartões salvos desde que a câmera abriu (captura em sequência).
+  const [sessionSaved, setSessionSaved] = useState(0);
+  // Alunos ainda sem cartão corrigido; só em memória, nunca no aparelho.
+  const [missing, setMissing] = useState<string[] | null>(null);
   const client = useMemo(() => account ? accountClient(account) : null, [account]);
   const synchronizer = useMemo(() => store && client && account ? createSynchronizer(store, client, account.owner) : null, [store, client, account]);
 
@@ -98,11 +105,12 @@ function TeacherApp() {
     const [cachedSchools, cachedAssessments, cachedClasses, selectedSchool, savedRecords, pending, cachedApplications] = await Promise.all([
       storage.cache<School[]>(saved.owner, 'schools'), storage.cache<Assessment[]>(saved.owner, 'assessments'), storage.cache<SchoolClass[]>(saved.owner, 'classes'), storage.cache<string>(saved.owner, 'school'), storage.list(saved.owner), storage.operations(saved.owner), storage.cache<CorrectionApplication[]>(saved.owner,'applications'),
     ]);
+    const lastApplication = await storage.cache<string>(saved.owner, 'application');
     if (ownerRef.current !== saved.owner) return;
     setSchools(cachedSchools || []); setSchool(cachedSchools?.find(item => item.id === selectedSchool) || cachedSchools?.[0] || null);
     setApplications(cachedApplications || []);setSelectedApplication(null);
     setAssessments(cachedAssessments || []); setClasses(cachedClasses || []); setAssessment(null); setSchoolClass(null);
-    setRecords(savedRecords); setOperations(pending); setRecordId(null); setScreen('home');
+    setRecords(savedRecords); setOperations(pending); setRecordId(null); setLastApplicationId(lastApplication || null); setScreen('home');
   }
 
   const initialize = useCallback(async () => {
@@ -254,12 +262,29 @@ function TeacherApp() {
     try { await SecureStore.deleteItemAsync(ACCOUNT_KEY); await SecureStore.deleteItemAsync('ufaprova.session'); await endSession(API_URL); }
     catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível encerrar a sessão local.'); }
   }
-  async function continueSchool() {
-    if (!school || !account || !store) return;
-    await store.putCache(account.owner, 'school', school.id);
+  async function chooseSchool(item: School) {
+    if (!account || !store) return;
+    setSchool(item);
+    await store.putCache(account.owner, 'school', item.id);
     if (ownerRef.current !== account.owner) return;
-    setScreen('assessments');setSelectedApplication(null); setAssessment(null); setSchoolClass(null);
+    setScreen('home');
     if (connected && !loading) { setLoading(true); try { await loadCatalog(account, store); } finally { setLoading(false); } }
+  }
+  function selectApplication(item: CorrectionApplication) {
+    setSelectedApplication(item); setAssessment({ id: item.assessmentId, title: item.title }); setSchoolClass({ id: item.classId, name: item.className });
+  }
+  async function startCapture(item: CorrectionApplication) {
+    if (!school) { setScreen('schools'); setMessage('Selecione a escola antes de fotografar os cartões.'); return; }
+    selectApplication(item); setSessionSaved(0); setMissing(null); setError(''); setMessage('');
+    setLastApplicationId(item.id); setScreen('scan');
+    if (account && store) await store.putCache(account.owner, 'application', item.id).catch(() => {});
+  }
+  async function loadMissing() {
+    if (!client || !selectedApplication) return;
+    try {
+      const results = await client.applicationResults(selectedApplication.id);
+      setMissing(results.students.filter(student => student.processingStatus === 'not_scanned').map(student => student.studentName));
+    } catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível carregar a lista de alunos.'); }
   }
   async function saveCapture(sheet: CapturedSheet) {
     if (!store || !account) throw new Error('Abra os dados da conta antes de salvar.');
@@ -269,23 +294,24 @@ function TeacherApp() {
       const image = await prepareImage(sheet.photo);
       if (ownerRef.current !== account.owner) throw new Error('A conta mudou antes de salvar a captura.');
       if(!sheet.applicationId)throw Error('Selecione uma aplicação da prova antes de fotografar.');
-      const id = await store.create(account.owner, sheet, image);
-      await reload(); if (ownerRef.current === account.owner) { setRecordId(id); setScreen('record'); }
+      await store.create(account.owner, sheet, image);
+      await reload();
+      if (ownerRef.current === account.owner) { setSessionSaved(value => value + 1); setRecordId(null); Vibration.vibrate(60); }
     } finally { savingCapture.current = false; }
   }
-  useEffect(() => { if (screen === 'home' || screen === 'assessments') correctScreen.current = screen; }, [screen]);
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       const parent = parentOf[screen];
       if (parent) { setScreen(parent); return true; }
-      if (screen !== 'login' && screen !== 'home') { setScreen(correctScreen.current); return true; }
+      if (screen !== 'login' && screen !== 'home') { setScreen('home'); return true; }
       return false;
     });
     return () => subscription.remove();
   }, [screen]);
   function changeTab(tab: TeacherTab) {
     setError('');
-    setScreen(tab === 'records' ? 'records' : tab === 'account' ? 'account' : correctScreen.current);
+    if (tab === 'records') setRecordsFilter('all');
+    setScreen(tab === 'records' ? 'records' : tab === 'account' ? 'account' : 'home');
   }
   async function pullToRefresh() {
     if (!account || !store || refreshing) return;
@@ -307,8 +333,8 @@ function TeacherApp() {
     setSchool({ id: record.sheet.schoolId, name: record.sheet.schoolName });
     setAssessment({ id: record.sheet.assessmentId, title: record.sheet.assessmentTitle });
     setSchoolClass({ id: record.sheet.classId, name: record.sheet.className });
-    const application=applications.find(a=>a.id===record.sheet.applicationId);setSelectedApplication(application || null);
-    if(!application){setScreen('assessments');setMessage('Selecione a aplicação antes de capturar o próximo cartão.');}else setScreen('scan');
+    const application=applications.find(a=>a.id===record.sheet.applicationId);
+    if(!application){setSelectedApplication(null);setScreen('home');setMessage('Selecione a aplicação antes de capturar o próximo cartão.');}else void startCapture(application);
   }
   if(educatorRegistration)return <EducatorRegistrationScreen apiUrl={API_URL} onBack={()=>setEducatorRegistration(false)} onCreated={(value,role)=>{setEducatorRegistration(false);setEmail(value);setPassword('');setShowPassword(false);setError('');setMessage(`Conta de ${role==='coordinator'?'coordenador':'professor'} criada. Confirme o link enviado ao seu e-mail e depois entre aqui.`);}} />;
   if(studentAccess&&hostProfile==='teacher')return <Screen>
@@ -349,7 +375,12 @@ function TeacherApp() {
   const back = parentOf[screen] ? () => setScreen(parentOf[screen]!) : undefined;
   const status = `${account?.displayName} • ${connected ? 'Conectado' : 'Sem conexão'}${syncing ? ' • Sincronizando…' : ''}`;
   // Telas com cabeçalho próprio do App mostram a conta e a conexão nele.
-  const ownHeader = screen === 'home' || screen === 'assessments' || screen === 'account' || screen === 'records';
+  const ownHeader = screen === 'home' || screen === 'schools' || screen === 'account' || screen === 'records';
+  const attentionRecords = records.filter(record => needsAttention(record, operations));
+  const shownRecords = recordsFilter === 'attention' ? attentionRecords : records;
+  const scanProgress = selectedApplication ? applicationProgress(selectedApplication, records) : null;
+  // Próxima digitalização pendente depois da atual, para revisar em fila.
+  const nextPending = selectedRecord ? attentionRecords.find(record => record.id !== selectedRecord.id) : undefined;
   const notices = <>
     {!connected && <Notice tone="warning" icon="cloud-offline">Sem internet: as capturas ficam salvas neste aparelho e são enviadas quando a conexão voltar.</Notice>}
     {unsent && <Notice tone="warning">Há fotos aguardando envio. No navegador elas existem só nesta aba: mantenha-a aberta até o envio terminar.</Notice>}
@@ -358,29 +389,42 @@ function TeacherApp() {
   </>;
   return <Screen
     refreshing={refreshing}
-    onRefresh={screen === 'home' || screen === 'assessments' || screen === 'records' ? () => { void pullToRefresh(); } : undefined}
+    onRefresh={screen === 'home' || screen === 'schools' || screen === 'records' ? () => { void pullToRefresh(); } : undefined}
     tabs={screen === 'scan' ? undefined : <TabBar tabs={tabs} current={tabOf(screen)} onChange={changeTab} />}
   >
     {!ownHeader && <Text style={ui.small}>{status}</Text>}
     {!ownHeader && notices}
     {screen === 'home' ? <>
-      <Header title="Selecione a escola" status={status} />{notices}
-      {!schools.length && <EmptyState icon="school" title="Nenhuma escola neste aparelho" text="Conecte-se para carregar seu cadastro." />}
-      {schools.map(item => <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{ selected: school?.id === item.id }} style={[ui.card, school?.id === item.id && ui.selected]} onPress={() => setSchool(item)}><Text style={ui.cardTitle}>{item.name}</Text><Text style={ui.small}>{[item.city, item.state].filter(Boolean).join(' • ')}</Text></Pressable>)}
-      <Pressable disabled={!school || loading} style={[ui.primary, (!school || loading) && ui.disabled]} onPress={() => { void continueSchool().catch(err => setError(err.message)); }}><Text style={ui.primaryText}>Corrigir cartões de respostas</Text></Pressable>
-    </> : screen === 'assessments' ? <>
-      <Header title="Selecione a aplicação da prova" subtitle={school?.name} onBack={back} status={status} />{notices}
+      <Header title="Corrigir" status={status} />{notices}
       {loading && <Loading label="Atualizando listas" />}
-      <Text style={ui.text}>Use o cartão de respostas com QR Code gerado no portal. Confira também a escola impressa no cartão.</Text>
-      {!applications.length && <EmptyState icon="calendar" title="Nenhuma aplicação disponível" text="No portal, abra Turmas e alunos, agende a avaliação para a turma e gere os cartões individuais."><Pressable style={ui.secondary} onPress={()=>void Linking.openURL(`${PORTAL_URL}/portal`).catch(()=>setError('Não foi possível abrir o portal.'))}><Text style={ui.buttonText}>Abrir portal para preparar os cartões</Text></Pressable></EmptyState>}
-      {applications.map(item=><Pressable key={item.id} accessibilityRole="radio" accessibilityState={{selected:selectedApplication?.id===item.id}} style={[ui.card,selectedApplication?.id===item.id&&ui.selected]} onPress={()=>{setSelectedApplication(item);setAssessment({id:item.assessmentId,title:item.title});setSchoolClass({id:item.classId,name:item.className});}}><Text style={ui.cardTitle}>{item.title}</Text><Text style={ui.text}>{[item.subject,item.className,`${item.students} alunos`].filter(Boolean).join(' · ')}</Text>{!!answerKeyLine(item)&&<Text style={ui.small}>{answerKeyLine(item)}</Text>}{!!answerKeyProblem(item)&&<Text style={ui.error}>{answerKeyProblem(item)}</Text>}</Pressable>)}
-      <Pressable disabled={!selectedApplication||loading||!!answerKeyProblem(selectedApplication)} style={[ui.primary,(!selectedApplication||loading||!!answerKeyProblem(selectedApplication))&&ui.disabled]} onPress={()=>setScreen('scan')}><Text style={ui.primaryText}>Continuar para captura</Text></Pressable>
-      <Pressable disabled={!selectedApplication||!connected} style={[ui.secondary,(!selectedApplication||!connected)&&ui.disabled]} onPress={()=>setScreen('results')}><Text style={ui.buttonText}>Revisar e autorizar resultados</Text></Pressable>
-      {!!selectedApplication&&!connected&&<Text style={ui.small}>A revisão e a autorização dos resultados exigem conexão.</Text>}
+      <TeacherHome
+        schoolName={school?.name ?? null} canChangeSchool={schools.length !== 1} onChangeSchool={() => setScreen('schools')}
+        applications={applications} records={records} attention={attentionRecords.length}
+        onOpenAttention={() => { setRecordsFilter('attention'); setScreen('records'); }}
+        lastApplicationId={lastApplicationId} selectedId={selectedApplication?.id ?? null} onSelect={selectApplication}
+        onCapture={item => { void startCapture(item); }} onResults={item => { selectApplication(item); setScreen('results'); }}
+        connected={connected} busy={loading}
+        onOpenPortal={() => void Linking.openURL(`${PORTAL_URL}/portal`).catch(() => setError('Não foi possível abrir o portal.'))}
+      />
+    </> : screen === 'schools' ? <>
+      <Header title="Selecione a escola" onBack={back} status={status} />{notices}
+      {!schools.length && <EmptyState icon="school" title="Nenhuma escola neste aparelho" text="Conecte-se para carregar seu cadastro." />}
+      {schools.map(item => <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{ selected: school?.id === item.id }} style={[ui.card, school?.id === item.id && ui.selected]} onPress={() => { void chooseSchool(item).catch(err => setError(err.message)); }}><Text style={ui.cardTitle}>{item.name}</Text><Text style={ui.small}>{[item.city, item.state].filter(Boolean).join(' • ')}</Text></Pressable>)}
     </> : screen === 'results' && selectedApplication && client ? <ResultsScreen key={selectedApplication.id} client={client} applicationId={selectedApplication.id} connected={connected} newId={Crypto.randomUUID}
-        onReviewScan={scanId=>{const local=records.find(record=>record.remoteId===scanId);if(!local)return false;setRecordId(local.id);setScreen('record');return true;}} onBack={()=>setScreen('assessments')} />
-    : screen === 'scan' && school && assessment && schoolClass ? <CaptureScreen applicationId={selectedApplication?.id} school={school} assessment={assessment} schoolClass={schoolClass} onConfirm={saveCapture} onBack={() => setScreen('assessments')} />
-    : screen === 'record' && selectedRecord && store ? <RecordScreen key={selectedRecord.id} record={selectedRecord} operations={operations} store={store} connected={connected} onSaved={reload} onRefresh={refreshSelected} onRetry={retrySelected} onNext={() => nextCapture(selectedRecord)} onBack={() => setScreen('records')} />
+        onReviewScan={scanId=>{const local=records.find(record=>record.remoteId===scanId);if(!local)return false;setRecordId(local.id);setScreen('record');return true;}} onBack={()=>setScreen('home')} />
+    : screen === 'scan' && school && assessment && schoolClass ? <CaptureScreen applicationId={selectedApplication?.id} school={school} assessment={assessment} schoolClass={schoolClass} onConfirm={saveCapture} onBack={() => setScreen('home')} backLabel={sessionSaved ? 'Concluir captura' : 'Voltar'}
+        header={<>
+          {sessionSaved > 0 && <Notice tone="success" icon="checkmark-circle">{sessionSaved} cartão(ões) salvo(s) nesta sessão. Fotografe o próximo.</Notice>}
+          {scanProgress && <View style={ui.card}>
+            <Text style={ui.cardTitle}>{scanProgress.completed} de {scanProgress.students} corrigidos</Text>
+            <ProgressBar value={scanProgress.completed} max={scanProgress.students} label={`${scanProgress.completed} de ${scanProgress.students} corrigidos`} />
+            {!!scanProgress.waiting && <Text style={ui.small}>{scanProgress.waiting} foto(s) no aparelho aguardando envio.</Text>}
+            {connected && missing === null && <Pressable accessibilityRole="button" style={ui.passwordToggle} onPress={() => { void loadMissing(); }}><Text style={ui.linkText}>Ver quem falta</Text></Pressable>}
+            {missing !== null && <Text style={ui.small}>{missing.length ? `Faltam: ${missing.join(', ')}.` : 'Todos os alunos já têm cartão corrigido.'}</Text>}
+          </View>}
+        </>} />
+    : screen === 'record' && selectedRecord && store ? <RecordScreen key={selectedRecord.id} record={selectedRecord} operations={operations} store={store} connected={connected} onSaved={reload} onRefresh={refreshSelected} onRetry={retrySelected} onNext={() => nextCapture(selectedRecord)} onBack={() => setScreen('records')}
+        onNextPending={nextPending ? () => setRecordId(nextPending.id) : undefined} />
     : screen === 'account' ? <>
       <Header title="Conta" subtitle={account?.email} status={status} />{notices}
       <View style={ui.card}>
@@ -393,8 +437,13 @@ function TeacherApp() {
       {account && connected && <DeleteAccount request={async (path, input) => createStudentClient(account.apiUrl, await sessionToken(account))(path, input)} onDeleted={async () => { await store?.clearOwner(account.owner); await signOut(); }} />}
     </> : <>
       <Header title="Digitalizações salvas" subtitle={pending ? `${pending} alteração(ões) aguardando sincronização.` : undefined} status={status} />{notices}
+      {records.length > 0 && <View style={ui.options}>
+        <Chip label={`Todas (${records.length})`} selected={recordsFilter === 'all'} onPress={() => setRecordsFilter('all')} />
+        <Chip label={`Precisam de revisão (${attentionRecords.length})`} selected={recordsFilter === 'attention'} onPress={() => setRecordsFilter('attention')} />
+      </View>}
       {!records.length && <EmptyState icon="documents" title="Nenhuma folha capturada" text="As folhas capturadas aparecerão aqui, mesmo sem conexão." />}
-      {records.map(record => <Pressable key={record.id} style={ui.card} onPress={() => { setRecordId(record.id); setScreen('record'); }}><Text style={ui.cardTitle}>{record.sheet.assessmentTitle} • {record.sheet.className}</Text><Text style={ui.small}>{localStatus(record, operations)}</Text><Text style={ui.small}>{record.sheet.schoolName}</Text></Pressable>)}
+      {!!records.length && !shownRecords.length && <EmptyState icon="checkmark-done" title="Nada para revisar" text="Todas as digitalizações estão em dia." />}
+      {shownRecords.map(record => <Pressable key={record.id} style={ui.card} onPress={() => { setRecordId(record.id); setScreen('record'); }}><Text style={ui.cardTitle}>{record.sheet.assessmentTitle} • {record.sheet.className}</Text><Text style={ui.small}>{localStatus(record, operations)}</Text><Text style={ui.small}>{record.sheet.schoolName}</Text></Pressable>)}
       <Pressable style={ui.primary} onPress={() => changeTab('correct')}><Text style={ui.primaryText}>Nova captura</Text></Pressable>
     </>}
   </Screen>;

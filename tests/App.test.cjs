@@ -11,7 +11,7 @@ async function setup(t, options = {}){
   let network;let token=options.login ? null : JSON.stringify({...(options.account??account),sessionToken:'token'});let uploads=0;
   let openedUrl;let googleReady=false;const switched=[];
   const client={capabilities:async()=>{},upload:async(data,id)=>{uploads++;return {id,status:'completed'}},read:async id=>({id,status:'completed',submissionId:null,revision:null,score:null,maxScore:null,requiresManualReview:false,imageAvailable:true,candidates:[],detectedAnswers:[]}),catalog:async path=>path==='/api/educator-profile'?{schools:[school]}:path==='/api/classes'?[schoolClass]:path==='/api/assessment-applications'?[application]:[assessment]};
-  const Capture=props=>React.createElement('Pressable',{onPress:()=>props.onConfirm({applicationId:props.applicationId,photo:{uri:'file:///photo.jpg',width:1000,height:2000},schoolId:props.school.id,assessmentId:props.assessment.id,classId:props.schoolClass.id,schoolName:props.school.name,assessmentTitle:props.assessment.title,className:props.schoolClass.name})},React.createElement('Text',null,'Confirmar foto de teste'));
+  let capture;const Capture=props=>{capture=props;return React.createElement(React.Fragment,null,props.header,React.createElement('Pressable',{onPress:()=>props.onConfirm({applicationId:props.applicationId,photo:{uri:'file:///photo.jpg',width:1000,height:2000},schoolId:props.school.id,assessmentId:props.assessment.id,classId:props.schoolClass.id,schoolName:props.school.name,assessmentTitle:props.assessment.title,className:props.schoolClass.name})},React.createElement('Text',null,'Confirmar foto de teste')));};
   const Record=props=>React.createElement('Text',null,`Registro ${props.record.sheet.assessmentTitle}: ${props.record.remoteId?'enviado':'salvo localmente'}`);
   const {default:App}=load(path.join(__dirname,'../App.tsx'),{
     './StudentScreen':()=>React.createElement('Text',null,'Painel do aluno'),
@@ -29,16 +29,17 @@ async function setup(t, options = {}){
   let component;await renderer.act(async()=>{component=renderer.create(React.createElement(App));});
   t.after(async()=>renderer.act(async()=>component.unmount()));
   async function press(label){const b=button(component,label);assert(b,`Missing button ${label}`);assert(!b.props.disabled,`Disabled ${label}`);await renderer.act(async()=>b.props.onPress());}
-  return {component,store,press,connect:async()=>renderer.act(async()=>network({isConnected:true,isInternetReachable:true})),get uploads(){return uploads},get openedUrl(){return openedUrl},googleReady:()=>{googleReady=true},get credentials(){return token},switched};
+  return {component,store,press,connect:async()=>renderer.act(async()=>network({isConnected:true,isInternetReachable:true})),get uploads(){return uploads},get openedUrl(){return openedUrl},googleReady:()=>{googleReady=true},get credentials(){return token},switched,get capture(){return capture}};
 }
 test('startup restores cached account and lists, and an offline capture survives navigation',async t=>{
   const h=await setup(t);assert(text(h.component.root).includes('Sem conexão'));assert(text(h.component.root).includes('Escola'));
-  await h.press('Corrigir cartões de respostas');await h.press('Prova');await h.press('Turma');await h.press('Continuar para captura');await h.press('Confirmar foto de teste');
-  const records=await h.store.list(account.owner);assert.equal(records.length,1);assert.equal(records[0].sheet.assessmentId,assessment.id);assert.equal(records[0].sheet.applicationId,'30000000-0000-4000-8000-000000000001');assert.equal(h.uploads,0);assert(text(h.component.root).includes('salvo localmente'));
-  await h.press('Digitalizações');assert(text(h.component.root).includes('Pendente'));
+  await h.press('Prova');await h.press('Fotografar cartões');await h.press('Confirmar foto de teste');
+  const records=await h.store.list(account.owner);assert.equal(records.length,1);assert.equal(records[0].sheet.assessmentId,assessment.id);assert.equal(records[0].sheet.applicationId,'30000000-0000-4000-8000-000000000001');assert.equal(h.uploads,0);assert(text(h.component.root).includes('1 cartão(ões) salvo(s) nesta sessão'));assert(text(h.component.root).includes('1 foto(s) no aparelho aguardando envio'));
+  await renderer.act(async()=>h.capture.onBack());
+  await h.press('Digitalizações');assert(text(h.component.root).includes('Pendente'));await h.press('Corrigir');assert(text(h.component.root).includes('Continuar de onde parou'));
 });
 test('connectivity restoration consumes the saved queue while preserving account context',async t=>{
-  const h=await setup(t);await h.press('Corrigir cartões de respostas');await h.press('Prova');await h.press('Turma');await h.press('Continuar para captura');await h.press('Confirmar foto de teste');
+  const h=await setup(t);await h.press('Prova');await h.press('Fotografar cartões');await h.press('Confirmar foto de teste');
   await h.connect();assert.equal(h.uploads,1);const record=(await h.store.list(account.owner))[0];assert.equal(record.remoteId,record.id);assert.equal((await h.store.operations(account.owner)).length,0);
 });
 test('password starts hidden and can be revealed without changing its value',async t=>{
@@ -60,7 +61,7 @@ test('completed Google login verifies the API identity before persisting and ope
   let identityCalls=0;
   global.fetch=async(url,options)=>{assert.equal(options.headers.authorization,'Bearer google-session');identityCalls++;return {ok:true,json:async()=>({data:{user:{id:'u'},institution:{id:'i'}}})}};
   const h=await setup(t,{login:true});await h.press('Entrar com Google');h.googleReady();await h.press('Concluir entrada com Google');
-  assert.equal(identityCalls,1);assert.equal(JSON.parse(h.credentials).sessionToken,'google-session');assert(text(h.component.root).includes('Selecione a escola'));
+  assert.equal(identityCalls,1);assert.equal(JSON.parse(h.credentials).sessionToken,'google-session');assert(text(h.component.root).includes('Aplicações'));
 });
 test('failed identity verification never persists a Google session',async t=>{
   const original=global.fetch;t.after(()=>{global.fetch=original});
@@ -79,7 +80,7 @@ test('native coordinator signup returns to login with the email filled and never
  await h.press('Criar minha conta');assert.equal(calls,1);assert.equal(h.credentials,null);assert(text(h.component.root).includes('Confirme o link enviado ao seu e-mail'));assert.equal(h.component.root.findAllByType('TextInput').find(n=>n.props.accessibilityLabel==='E-mail').props.value,'coord@example.test');
 });
 test('result review opens for the selected application only with a connection',async t=>{
-  const h=await setup(t);await h.press('Corrigir cartões de respostas');await h.press('Prova');
+  const h=await setup(t);await h.press('Prova');
   assert.equal(button(h.component,'Revisar e autorizar resultados').props.disabled,true);
   assert(text(h.component.root).includes('exigem conexão'));
   await h.connect();await h.press('Revisar e autorizar resultados');
@@ -106,12 +107,12 @@ test('a student session on the professor subdomain is sent to the student area, 
 
 test('an assessment with an incomplete answer key shows the versions and cannot start correction',async t=>{
   const h=await setup(t,{application:{subject:'Química',versions:[{code:'A',questions:10,objective:10,missingAnswerKeys:[3,7]}],answerKeyReady:false}});
-  await h.press('Corrigir cartões de respostas');await h.press('Prova');
+  await h.press('Prova');
   const screen=text(h.component.root);
-  assert.match(screen,/Química · Turma · 1 alunos/);
+  assert.match(screen,/Química · Turma/);assert.match(screen,/1 de 1 corrigidos/);
   assert.match(screen,/10 questões · gabarito versão A/);
   assert.match(screen,/Gabarito incompleto na versão A \(questões 3, 7\)/);
-  assert.equal(button(h.component,'Continuar para captura').props.disabled,true);
+  assert.equal(button(h.component,'Fotografar cartões').props.disabled,true);
 });
 test('forgot password asks for the e-mail and gives the same answer whether or not the account exists',async t=>{
   const h=await setup(t,{login:true});const calls=[];const previous=global.fetch;t.after(()=>{global.fetch=previous;});

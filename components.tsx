@@ -117,3 +117,24 @@ export function Loading({ label }: { label: string }) {
   const c = useColors();
   return <ActivityIndicator accessibilityLabel={label} color={c.accent} style={{ marginTop: space.xl }} />;
 }
+
+// Barra de progresso com rótulo acessível ("12 de 30").
+export function ProgressBar({ value, max, label }: { value: number; max: number; label: string }) {
+  const c = useColors();
+  const percent = max ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  return (
+    <View accessibilityRole="progressbar" accessibilityLabel={label} accessibilityValue={{ min: 0, max, now: value }} style={{ height: 8, borderRadius: radius.pill, backgroundColor: c.surfaceMuted, marginTop: space.sm, overflow: 'hidden' }}>
+      <View style={{ width: `${percent}%`, height: '100%', backgroundColor: percent >= 100 ? c.success : c.accent, borderRadius: radius.pill }} />
+    </View>
+  );
+}
+
+// Botão pequeno de filtro/seleção.
+export function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  const c = useColors();
+  return (
+    <Pressable accessibilityRole="button" accessibilityState={{ selected }} onPress={onPress} style={{ paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.pill, borderWidth: 1, borderColor: selected ? c.accent : c.border, backgroundColor: selected ? c.accentSoft : 'transparent', minHeight: 40, justifyContent: 'center' }}>
+      <Text style={{ color: selected ? c.accent : c.text, fontWeight: '600', fontSize: 14 }}>{label}</Text>
+    </Pressable>
+  );
+}

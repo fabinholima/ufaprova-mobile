@@ -15,6 +15,9 @@ A validação com fotos reais e aparelhos Android/iOS continua necessária. A le
 ## Navegação e visual
 
 - **Professor:** abas Corrigir · Digitalizações · Conta. A aba Digitalizações mostra quantas alterações faltam sincronizar; sincronização, atualizar listas, sair e excluir conta ficam em Conta.
+- **Painel Corrigir:** escola lembrada (troca em "Trocar escola"), aviso de digitalizações que esperam revisão, "Continuar de onde parou" (última aplicação usada) e as aplicações em ordem (abertas, próximas agendadas, encerradas) com o progresso "X de Y corrigidos" e as fotos ainda no aparelho. Tocar numa aplicação mostra "Fotografar cartões" e "Revisar e autorizar resultados".
+- **Captura em sequência:** depois de "Usar esta foto", o cartão é salvo, o celular vibra e a câmera volta pronta para o próximo, com o contador da sessão e o progresso da aplicação. Com internet, "Ver quem falta" lista os alunos ainda sem cartão corrigido (só em memória, nada fica no aparelho). "Concluir captura" volta ao painel.
+- **Fila de revisão:** em Digitalizações, o filtro "Precisam de revisão" mostra envios bloqueados, marcações para conferir, leituras que falharam e discursivas pendentes; dentro de uma delas, "Próxima para revisar" abre a seguinte.
 - **Aluno:** abas Notas · Turmas · Perfil. Logo após entrar, abre Notas; sem notas ainda, abre Turmas. A aba Turmas mostra quantas solicitações aguardam aprovação.
 - O botão voltar do Android volta à tela anterior (aplicação → escola, captura/resultados → aplicação, registro → digitalizações).
 - No celular, puxar a lista para baixo atualiza (escolas e aplicações, digitalizações, dados do aluno).

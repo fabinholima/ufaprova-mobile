@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { ActivityIndicator, AppState, Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import type { CameraCapturedPicture } from 'expo-camera';
@@ -23,9 +24,12 @@ type Props = {
   schoolClass: { id: string; name: string };
   onConfirm: (sheet: CapturedSheet) => void | Promise<void>;
   onBack: () => void;
+  // Progresso da aplicação e cartões salvos nesta sessão, logo abaixo do título.
+  header?: ReactNode;
+  backLabel?: string;
 };
 
-export default function CaptureScreen({ applicationId, school, assessment, schoolClass, onConfirm, onBack }: Props) {
+export default function CaptureScreen({ applicationId, school, assessment, schoolClass, onConfirm, onBack, header, backLabel = 'Voltar para avaliações' }: Props) {
   const ui = useUi();
   const camera = useRef<CameraView>(null);
   const busy = useRef(false);
@@ -98,7 +102,11 @@ export default function CaptureScreen({ applicationId, school, assessment, schoo
   async function confirmPhoto() {
     if (!photo || busy.current) return;
     busy.current = true; setSaving(true); setError('');
-    try { await onConfirm({ photo, applicationId, schoolId: school.id, assessmentId: assessment.id, classId: schoolClass.id, schoolName: school.name, assessmentTitle: assessment.title, className: schoolClass.name }); }
+    try {
+      await onConfirm({ photo, applicationId, schoolId: school.id, assessmentId: assessment.id, classId: schoolClass.id, schoolName: school.name, assessmentTitle: assessment.title, className: schoolClass.name });
+      // Captura em sequência: a câmera volta pronta para o próximo cartão.
+      if (mounted.current) retake();
+    }
     catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : 'Não foi possível salvar a foto no aparelho.'); }
     finally { busy.current = false; if (mounted.current) setSaving(false); }
   }
@@ -115,6 +123,7 @@ export default function CaptureScreen({ applicationId, school, assessment, schoo
     <>
       <Text style={ui.title}>{assessment.title}</Text>
       <Text style={ui.text}>{school.name} • {schoolClass.name}</Text>
+      {header}
       {photo ? (
         <>
           <Image source={{ uri: photo.uri }} style={styles.preview} resizeMode="contain" accessibilityLabel="Foto da folha de respostas" />
@@ -160,7 +169,7 @@ export default function CaptureScreen({ applicationId, school, assessment, schoo
       </Pressable>}
       {!!error && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
       <Pressable disabled={capturing || saving} style={[ui.secondary, (capturing || saving) && ui.disabled]} onPress={onBack}>
-        <Text style={ui.buttonText}>Voltar para avaliações</Text>
+        <Text style={ui.buttonText}>{backLabel}</Text>
       </Pressable>
     </>
   );

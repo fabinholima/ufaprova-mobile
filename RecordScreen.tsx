@@ -13,9 +13,11 @@ export function localStatus(record: LocalRecord, operations: Operation[]): strin
   if (operations.some(op => op.recordId === record.id && op.state !== 'blocked')) return 'Correção aguardando sincronização';
   return record.scan?.status === 'completed' ? record.grade?.requiresManualReview ? 'Discursivas pendentes' : 'Correção sincronizada' : record.scan?.status === 'review' ? 'Confira as marcações' : record.scan?.status === 'failed' ? 'Falha na leitura' : 'Aguardando leitura no servidor';
 }
-export default function RecordScreen({ record, operations, store, connected, onSaved, onRefresh, onNext, onBack, onRetry }: {
+export default function RecordScreen({ record, operations, store, connected, onSaved, onRefresh, onNext, onBack, onRetry, onNextPending }: {
   record: LocalRecord; operations: Operation[]; store: OfflineStore; connected: boolean;
   onSaved: () => Promise<void>; onRefresh: () => Promise<void>; onNext: () => void; onBack: () => void; onRetry: () => Promise<void>;
+  // Abre a próxima digitalização que espera revisão (fila de pendências).
+  onNextPending?: () => void;
 }) {
   const ui = useUi();
   const [candidateId, setCandidateId] = useState('');
@@ -102,7 +104,8 @@ export default function RecordScreen({ record, operations, store, connected, onS
     </>}
     <Pressable disabled={!connected || busy} style={[ui.secondary, (!connected || busy) && ui.disabled]} onPress={() => { void onRefresh().catch(err => setError(err.message)); }}><Text style={ui.buttonText}>Sincronizar e atualizar estado</Text></Pressable>
     {(scan?.status === 'review' || scan?.status === 'failed') && scan.imageAvailable && !confirmation && <Pressable disabled={!connected || busy} style={[ui.secondary, (!connected || busy) && ui.disabled]} onPress={() => { void onRetry().catch(err => setError(err.message)); }}><Text style={ui.buttonText}>Reprocessar foto no servidor</Text></Pressable>}
-    <Pressable disabled={busy} style={ui.primary} onPress={onNext}><Text style={ui.primaryText}>Capturar próxima folha</Text></Pressable>
+    {onNextPending && <Pressable disabled={busy} style={ui.primary} onPress={onNextPending}><Text style={ui.primaryText}>Próxima para revisar</Text></Pressable>}
+    <Pressable disabled={busy} style={onNextPending ? ui.secondary : ui.primary} onPress={onNext}><Text style={onNextPending ? ui.buttonText : ui.primaryText}>Capturar próxima folha</Text></Pressable>
     <Pressable disabled={busy} style={ui.secondary} onPress={onBack}><Text style={ui.buttonText}>Voltar às digitalizações</Text></Pressable>
   </>;
 }

@@ -18,6 +18,7 @@ const nativeDefaults = {
 const reactNativeDefaults = {
   useColorScheme: () => 'light',
   BackHandler: { addEventListener: () => ({ remove() {} }) },
+  Vibration: { vibrate: () => {} },
   RefreshControl: 'RefreshControl',
   StyleSheet: { create: (x) => x },
 };
