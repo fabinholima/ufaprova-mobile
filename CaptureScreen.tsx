@@ -27,9 +27,12 @@ type Props = {
   // Progresso da aplicação e cartões salvos nesta sessão, logo abaixo do título.
   header?: ReactNode;
   backLabel?: string;
+  // Textos para outras folhas (ex.: páginas de redação).
+  instructions?: string;
+  confirmLabel?: string;
 };
 
-export default function CaptureScreen({ applicationId, school, assessment, schoolClass, onConfirm, onBack, header, backLabel = 'Voltar para avaliações' }: Props) {
+export default function CaptureScreen({ applicationId, school, assessment, schoolClass, onConfirm, onBack, header, backLabel = 'Voltar para avaliações', instructions, confirmLabel = 'Usar esta foto' }: Props) {
   const ui = useUi();
   const camera = useRef<CameraView>(null);
   const busy = useRef(false);
@@ -129,7 +132,7 @@ export default function CaptureScreen({ applicationId, school, assessment, schoo
           <Image source={{ uri: photo.uri }} style={styles.preview} resizeMode="contain" accessibilityLabel="Foto da folha de respostas" />
           <Text style={ui.text}>Confira se a folha inteira está visível e se as marcações estão nítidas.</Text>
           <Pressable disabled={saving} style={[ui.primary, saving && ui.disabled]} onPress={confirmPhoto}>
-            <Text style={ui.primaryText}>{saving ? 'Salvando no aparelho…' : 'Usar esta foto'}</Text>
+            <Text style={ui.primaryText}>{saving ? (instructions ? 'Enviando…' : 'Salvando no aparelho…') : confirmLabel}</Text>
           </Pressable>
           <Pressable disabled={saving} style={[ui.secondary, saving && ui.disabled]} onPress={retake}><Text style={ui.buttonText}>Refazer foto</Text></Pressable>
         </>
@@ -144,7 +147,7 @@ export default function CaptureScreen({ applicationId, school, assessment, schoo
         </>
       ) : (
         <>
-          <Text style={ui.text}>Coloque a folha em uma superfície plana e bem iluminada. Enquadre o cartão inteiro, incluindo o QR Code e todas as alternativas. Evite sombras e mantenha o celular paralelo ao papel.</Text>
+          <Text style={ui.text}>{instructions ?? 'Coloque a folha em uma superfície plana e bem iluminada. Enquadre o cartão inteiro, incluindo o QR Code e todas as alternativas. Evite sombras e mantenha o celular paralelo ao papel.'}</Text>
           {active && !cameraFailed ? (
             <View style={styles.preview}>
               <CameraView key={attempt} ref={camera} style={StyleSheet.absoluteFill} facing="back" mode="picture" autofocus="on" enableTorch={torch}

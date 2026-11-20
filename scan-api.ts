@@ -5,6 +5,8 @@ import { isPending, parseGrade, parseScan, parseStatus, requireId, reviewRespons
 import type { Candidate, Grade, Label, Scan } from './scan-contract';
 import { parseApplicationResults, parseAuthorize, parseFollowups, parseResultDetail, parseSettings } from './results-contract';
 import type { ApplicationResults, AuthorizeResponse, Followup, FollowupInput, ResultDetail, ResultSettings } from './results-contract';
+import { essayId, parseEssayApplications, parseEssayEntry, parseEssayQueue } from './essay-contract';
+import type { EssayApplication, EssayEntry, EssayQueueItem } from './essay-contract';
 
 const IMAGE_PREFIX = 'data:image/jpeg;base64,';
 export function jpegDataUrl(base64: string | undefined): string {
@@ -47,6 +49,11 @@ export function createScanClient(apiUrl: string, token: () => Promise<string | n
       clearTimeout(timeout);
       signal?.removeEventListener('abort', abort);
     }
+  }
+  async function readEssayEntry(entryId: string): Promise<EssayEntry> {
+    const entry = parseEssayEntry(await request(`/api/essay-entries/${essayId(entryId)}`));
+    if (entry.id !== entryId) throw new Error('A API retornou outra redação.');
+    return entry;
   }
   return {
     async upload(imageDataUrl: string, clientScanId?: string, expectedApplicationId?: string): Promise<{ id: string; status: Scan['status'] }> {
@@ -115,6 +122,38 @@ export function createScanClient(apiUrl: string, token: () => Promise<string | n
       const session = await token();
       if (!session) throw new ScanApiError('Sua sessão expirou. Volte e entre novamente.', false, 401);
       return { uri: `${apiUrl.replace(/\/$/, '')}/api/card-scans/${requireId(scanId)}/image`, headers: authHeaders(session) };
+    },
+    // Redações: sempre online, sem cópia local (como no portal).
+    async essayApplications(): Promise<EssayApplication[]> {
+      return parseEssayApplications(await request('/api/essay-applications'));
+    },
+    async essayQueue(applicationId: string): Promise<EssayQueueItem[]> {
+      const items: EssayQueueItem[] = [];
+      // A fila vem paginada (30 por página); uma turma cabe em poucas páginas.
+      for (let page = 1; page <= 20; page++) {
+        const result = parseEssayQueue(await request(`/api/essay-entries?applicationId=${essayId(applicationId)}&page=${page}`));
+        items.push(...result.items);
+        if (page >= result.pages) break;
+      }
+      return items;
+    },
+    essayEntry: readEssayEntry,
+    async essayAction(entryId: string, action: 'receive' | 'ocr' | 'ai-grading' | 'grading/reopen' | 'absent' | 'publish' | 'transcription' | 'grading' | 'grading/finalize', body?: object): Promise<EssayEntry> {
+      const method = action === 'transcription' || action === 'grading' ? 'PUT' : 'POST';
+      const data = await request(`/api/essay-entries/${essayId(entryId)}/${action}`, { method, ...(body ? { body: JSON.stringify(body) } : {}) });
+      // ocr, ai-grading e absent não devolvem a produção inteira.
+      return data && typeof data === 'object' && 'status' in data && 'student' in data ? parseEssayEntry(data) : readEssayEntry(entryId);
+    },
+    async addEssayPage(entryId: string, dataUrl: string): Promise<void> {
+      await request(`/api/essay-entries/${essayId(entryId)}/files`, { method: 'POST', body: JSON.stringify({ dataUrl }) });
+    },
+    async removeEssayPage(entryId: string, fileId: string): Promise<void> {
+      await request(`/api/essay-entries/${essayId(entryId)}/files/${essayId(fileId)}`, { method: 'DELETE' });
+    },
+    async essayPageImage(fileId: string): Promise<{ uri: string; headers: Record<string, string> }> {
+      const session = await token();
+      if (!session) throw new ScanApiError('Sua sessão expirou. Volte e entre novamente.', false, 401);
+      return { uri: `${apiUrl.replace(/\/$/, '')}/api/essay-files/${essayId(fileId)}`, headers: authHeaders(session) };
     },
     async retry(id: string): Promise<void> {
       await request(`/api/card-scans/${requireId(id)}/retry`, { method: 'POST' });

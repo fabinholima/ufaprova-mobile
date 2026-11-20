@@ -14,11 +14,11 @@ A validação com fotos reais e aparelhos Android/iOS continua necessária. A le
 
 ## Navegação e visual
 
-- **Professor:** abas Corrigir · Digitalizações · Conta. A aba Digitalizações mostra quantas alterações faltam sincronizar; sincronização, atualizar listas, sair e excluir conta ficam em Conta.
+- **Professor:** abas Corrigir · Redações · Digitalizações · Conta. A aba Digitalizações mostra quantas alterações faltam sincronizar; sincronização, atualizar listas, sair e excluir conta ficam em Conta.
 - **Painel Corrigir:** escola lembrada (troca em "Trocar escola"), aviso de digitalizações que esperam revisão, "Continuar de onde parou" (última aplicação usada) e as aplicações em ordem (abertas, próximas agendadas, encerradas) com o progresso "X de Y corrigidos" e as fotos ainda no aparelho. Tocar numa aplicação mostra "Fotografar cartões" e "Revisar e autorizar resultados".
 - **Captura em sequência:** depois de "Usar esta foto", o cartão é salvo, o celular vibra e a câmera volta pronta para o próximo, com o contador da sessão e o progresso da aplicação. Com internet, "Ver quem falta" lista os alunos ainda sem cartão corrigido (só em memória, nada fica no aparelho). "Concluir captura" volta ao painel.
 - **Fila de revisão:** em Digitalizações, o filtro "Precisam de revisão" mostra envios bloqueados, marcações para conferir, leituras que falharam e discursivas pendentes; dentro de uma delas, "Próxima para revisar" abre a seguinte.
-- **Aluno:** abas Notas · Turmas · Perfil. Logo após entrar, abre Notas; sem notas ainda, abre Turmas. A aba Turmas mostra quantas solicitações aguardam aprovação.
+- **Aluno:** abas Notas · Redações · Turmas · Perfil. Logo após entrar, abre Notas; sem notas ainda, abre Turmas. A aba Turmas mostra quantas solicitações aguardam aprovação.
 - **Notas do aluno:** no topo, o resumo com a última nota, a média do período mais recente e a tendência em pontos frente ao período anterior (e quantas avaliações aguardam revisão). Dentro da disciplina, a evolução aparece em linha com a meta de 60% tracejada, e cada habilidade da BNCC vira uma barra com a faixa da instituição (Consolidado ≥ 80%, Adequado ≥ 60%, Em desenvolvimento ≥ 40%, Requer intervenção) e a marca da meta. "Para reforçar" lista só as habilidades abaixo de 60% com questões suficientes. As faixas são as dos relatórios (`services/renderer/report-contract.mjs` no repositório da API).
 - **Aviso de nota nova (Android e iOS):** a permissão só é pedida quando o aluno toca em "Ativar avisos" (cartão na aba Notas, com turma aprovada, e em Perfil). Depois disso o aparelho é registrado na API a cada entrada. O aviso mostra só a disciplina e o nome da avaliação; tocar nele abre a avaliação no aplicativo. "Sair" remove o aparelho. Na web não há aviso. Envio pelo push do Expo (gratuito); no Android ele exige as credenciais do Firebase Cloud Messaging no EAS (veja abaixo).
 - O botão voltar do Android volta à tela anterior (aplicação → escola, captura/resultados → aplicação, registro → digitalizações).
@@ -239,3 +239,22 @@ que o professor autoriza o lançamento (API: `docs/resultados-publicacao.md`).
    Cada atualização cria uma nova entrada; o histórico anterior continua visível no detalhe.
 
 Com a assinatura da instituição inativa, novos envios de fotos aguardam na fila (resposta 402), sem perder a captura.
+
+## Redações
+
+Temas e aplicações de redação continuam sendo criados no portal. A aba **Redações** exige conexão: nada fica guardado no aparelho.
+
+**Professor**
+
+1. A lista mostra as redações aplicadas, com entregues e publicadas. Tocar numa delas abre a turma, com os filtros **Para corrigir**, **Sem entrega** e **Todas**.
+2. Na produção de um aluno, **Fotografar a redação** abre a câmera. Cada página é enviada na hora (mesmo preparo das fotos de cartão: JPEG, lado maior até 2600 px), e a câmera volta pronta para a próxima. Páginas enviadas podem ser vistas ou removidas antes de **Registrar recebimento**. Sem entrega, há **Marcar ausência** (e **Desfazer ausência**).
+3. Depois do recebimento, a transcrição pode ser digitada ou corrigida. Com a IA configurada no servidor (`ESSAY_AI_PROVIDER`), há **Transcrever com IA** e **Pedir sugestão da IA**; **Usar as notas sugeridas** só preenche níveis que existem no modelo, e a nota continua sendo do professor.
+4. Cada competência mostra os níveis do modelo da aplicação (ENEM: 0 a 200, de 40 em 40), com o descritor do nível escolhido. Há anulação com motivo (nota zero) e um comentário geral. **Salvar rascunho** guarda sem finalizar; **Finalizar correção** exige todas as competências.
+5. **Publicar nota ao aluno** pede confirmação. **Reabrir correção** retira a nota da área do aluno até nova publicação.
+6. Marcações, evidências e devolutivas por competência registradas no portal são preservadas quando a nota é alterada no app. Se outra pessoa salvou a correção antes, a API responde 409 e o app pede para atualizar.
+
+Rotas: `GET /api/essay-applications`, `GET /api/essay-entries?applicationId=` (paginada), `GET /api/essay-entries/:id`, `POST …/files` (`{ dataUrl }`), `DELETE …/files/:fileId`, `POST …/receive`, `POST …/absent` (`{ absent }`), `PUT …/transcription`, `POST …/ocr`, `POST …/ai-grading`, `PUT …/grading`, `POST …/grading/finalize`, `POST …/grading/reopen`, `POST …/publish` (`{ confirm: true }`) e `GET /api/essay-files/:id` (página com a sessão no cabeçalho).
+
+**Aluno**
+
+A aba **Redações** lista as propostas das turmas e, depois da publicação, a nota, cada competência com o nível e a devolutiva, e os comentários do professor. Escrever e enviar a redação continuam no portal. Rotas: `GET /api/student/essays` e `GET /api/student/essays/:id`.

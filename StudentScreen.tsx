@@ -11,10 +11,11 @@ import {
 } from "react-native";
 import { sessionStore as SecureStore } from "./platform-store";
 import { loginToken, persistSession } from "./platform-http";
-import { sameApi } from "./api-config";
+import { PORTAL_URL, sameApi } from "./api-config";
 import StudentInviteScanner from "./StudentInviteScanner";
 import StudentPhotoScreen from "./StudentPhotoScreen";
 import StudentGrades from "./StudentGrades";
+import StudentEssays from "./StudentEssays";
 import StudentCodeJoin from "./StudentCodeJoin";
 import StudentCodeAccess from "./StudentCodeAccess";
 import DeleteAccount from "./DeleteAccount";
@@ -35,9 +36,10 @@ import { requestPasswordReset } from "./password-reset";
 import { disablePush, enablePush, onResultOpened, syncPush } from "./push";
 import type { PushStatus } from "./push";
 import type { GoogleAttempt } from "./google-login";
-type StudentTab = "grades" | "classes" | "profile";
+type StudentTab = "grades" | "essays" | "classes" | "profile";
 const studentTabs: Tab<StudentTab>[] = [
   { key: "grades", label: "Notas", icon: "stats-chart" },
+  { key: "essays", label: "Redações", icon: "create" },
   { key: "classes", label: "Turmas", icon: "people" },
   { key: "profile", label: "Perfil", icon: "person-circle" },
 ];
@@ -295,9 +297,11 @@ export default function StudentScreen({
           identity
             ? tab === "grades"
               ? "Minhas notas"
-              : tab === "classes"
-                ? "Minhas turmas"
-                : "Meu perfil"
+              : tab === "essays"
+                ? "Minhas redações"
+                : tab === "classes"
+                  ? "Minhas turmas"
+                  : "Meu perfil"
             : mode === "register"
               ? "Criar conta de aluno"
               : mode === "code"
@@ -489,6 +493,11 @@ export default function StudentScreen({
                 onOpened={() => setOpenResultId(null)}
               />
             </>
+          ) : tab === "essays" ? (
+            <StudentEssays
+              request={gradesRequest}
+              onOpenPortal={() => void Linking.openURL(`${PORTAL_URL}/portal`).catch(() => setMessage("Não foi possível abrir o portal."))}
+            />
           ) : tab === "classes" ? (
             <>
               <StudentCodeJoin

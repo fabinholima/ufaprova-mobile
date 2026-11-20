@@ -17,6 +17,7 @@ import CaptureScreen from './CaptureScreen';
 import type { CapturedSheet } from './CaptureScreen';
 import RecordScreen, { localStatus } from './RecordScreen';
 import ResultsScreen from './ResultsScreen';
+import EssayScreen from './EssayScreen';
 import { ACCOUNT_KEY, PERSISTENT_STORE, accountClient, accountFromLogin, getStore } from './offline-runtime';
 import type { Account } from './offline-runtime';
 import type { LocalRecord, OfflineStore, Operation } from './offline-store';
@@ -34,9 +35,9 @@ import { startGoogleLogin, checkGoogleLogin } from './google-login';
 import { requestPasswordReset } from './password-reset';
 import type { GoogleAttempt } from './google-login';
 
-type Screen = 'login' | 'home' | 'schools' | 'scan' | 'records' | 'record' | 'results' | 'account';
-type TeacherTab = 'correct' | 'records' | 'account';
-const tabOf = (screen: Screen): TeacherTab => screen === 'records' || screen === 'record' ? 'records' : screen === 'account' ? 'account' : 'correct';
+type Screen = 'login' | 'home' | 'schools' | 'scan' | 'records' | 'record' | 'results' | 'essays' | 'account';
+type TeacherTab = 'correct' | 'essays' | 'records' | 'account';
+const tabOf = (screen: Screen): TeacherTab => screen === 'records' || screen === 'record' ? 'records' : screen === 'account' ? 'account' : screen === 'essays' ? 'essays' : 'correct';
 // Tela anterior de cada tela, para o botão voltar do Android e o "Voltar" do cabeçalho.
 const parentOf: Partial<Record<Screen, Screen>> = { schools: 'home', scan: 'home', results: 'home', record: 'records' };
 type School = { id: string; name: string; city?: string; state?: string };
@@ -90,6 +91,8 @@ function TeacherApp() {
   const [sessionSaved, setSessionSaved] = useState(0);
   // Alunos ainda sem cartão corrigido; só em memória, nunca no aparelho.
   const [missing, setMissing] = useState<string[] | null>(null);
+  // Voltar dentro da aba Redações (aplicação → turma → aluno).
+  const essayBack = useRef<(() => boolean) | null>(null);
   const client = useMemo(() => account ? accountClient(account) : null, [account]);
   const synchronizer = useMemo(() => store && client && account ? createSynchronizer(store, client, account.owner) : null, [store, client, account]);
 
@@ -301,6 +304,7 @@ function TeacherApp() {
   }
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (screen === 'essays' && essayBack.current?.()) return true;
       const parent = parentOf[screen];
       if (parent) { setScreen(parent); return true; }
       if (screen !== 'login' && screen !== 'home') { setScreen('home'); return true; }
@@ -311,7 +315,7 @@ function TeacherApp() {
   function changeTab(tab: TeacherTab) {
     setError('');
     if (tab === 'records') setRecordsFilter('all');
-    setScreen(tab === 'records' ? 'records' : tab === 'account' ? 'account' : 'home');
+    setScreen(tab === 'records' ? 'records' : tab === 'account' ? 'account' : tab === 'essays' ? 'essays' : 'home');
   }
   async function pullToRefresh() {
     if (!account || !store || refreshing) return;
@@ -369,6 +373,7 @@ function TeacherApp() {
   const pending = operations.length;
   const tabs: Tab<TeacherTab>[] = [
     { key: 'correct', label: 'Corrigir', icon: 'scan' },
+    { key: 'essays', label: 'Redações', icon: 'create' },
     { key: 'records', label: 'Digitalizações', icon: 'documents', badge: pending },
     { key: 'account', label: 'Conta', icon: 'person-circle' },
   ];
@@ -412,6 +417,8 @@ function TeacherApp() {
       {schools.map(item => <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{ selected: school?.id === item.id }} style={[ui.card, school?.id === item.id && ui.selected]} onPress={() => { void chooseSchool(item).catch(err => setError(err.message)); }}><Text style={ui.cardTitle}>{item.name}</Text><Text style={ui.small}>{[item.city, item.state].filter(Boolean).join(' • ')}</Text></Pressable>)}
     </> : screen === 'results' && selectedApplication && client ? <ResultsScreen key={selectedApplication.id} client={client} applicationId={selectedApplication.id} connected={connected} newId={Crypto.randomUUID}
         onReviewScan={scanId=>{const local=records.find(record=>record.remoteId===scanId);if(!local)return false;setRecordId(local.id);setScreen('record');return true;}} onBack={()=>setScreen('home')} />
+    : screen === 'essays' && client ? <EssayScreen client={client} connected={connected} prepare={prepareImage} backRef={essayBack}
+        onOpenPortal={() => void Linking.openURL(`${PORTAL_URL}/portal`).catch(() => setError('Não foi possível abrir o portal.'))} />
     : screen === 'scan' && school && assessment && schoolClass ? <CaptureScreen applicationId={selectedApplication?.id} school={school} assessment={assessment} schoolClass={schoolClass} onConfirm={saveCapture} onBack={() => setScreen('home')} backLabel={sessionSaved ? 'Concluir captura' : 'Voltar'}
         header={<>
           {sessionSaved > 0 && <Notice tone="success" icon="checkmark-circle">{sessionSaved} cartão(ões) salvo(s) nesta sessão. Fotografe o próximo.</Notice>}
