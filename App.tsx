@@ -383,6 +383,13 @@ function TeacherApp() {
   const ownHeader = screen === 'home' || screen === 'schools' || screen === 'account' || screen === 'records';
   const attentionRecords = records.filter(record => needsAttention(record, operations));
   const shownRecords = recordsFilter === 'attention' ? attentionRecords : records;
+  // Digitalizações agrupadas pelo que o professor precisa fazer.
+  const restRecords = records.filter(record => !attentionRecords.includes(record));
+  const doneRecords = restRecords.filter(record => record.scan?.status === 'completed' || record.scan?.status === 'discarded');
+  const progressRecords = restRecords.filter(record => !doneRecords.includes(record));
+  const sections: [string, LocalRecord[]][] = recordsFilter === 'attention'
+    ? [['Precisam da sua atenção', attentionRecords]]
+    : [['Precisam da sua atenção', attentionRecords], ['Em andamento', progressRecords], ['Concluídas', doneRecords]];
   const scanProgress = selectedApplication ? applicationProgress(selectedApplication, records) : null;
   // Próxima digitalização pendente depois da atual, para revisar em fila.
   const nextPending = selectedRecord ? attentionRecords.find(record => record.id !== selectedRecord.id) : undefined;
@@ -450,7 +457,15 @@ function TeacherApp() {
       </View>}
       {!records.length && <EmptyState icon="documents" title="Nenhuma folha capturada" text="As folhas capturadas aparecerão aqui, mesmo sem conexão." />}
       {!!records.length && !shownRecords.length && <EmptyState icon="checkmark-done" title="Nada para revisar" text="Todas as digitalizações estão em dia." />}
-      {shownRecords.map(record => <Pressable key={record.id} style={ui.card} onPress={() => { setRecordId(record.id); setScreen('record'); }}><Text style={ui.cardTitle}>{record.sheet.assessmentTitle} • {record.sheet.className}</Text><Text style={ui.small}>{localStatus(record, operations)}</Text><Text style={ui.small}>{record.sheet.schoolName}</Text></Pressable>)}
+      {/* Primeiro o que pede ação; depois o que o servidor ainda processa; por fim o concluído. */}
+      {sections.map(([title, list]) => list.length ? <View key={title}>
+        <Text style={ui.eyebrow}>{title} ({list.length})</Text>
+        {list.map(record => <Pressable key={record.id} accessibilityRole="button" style={ui.card} onPress={() => { setRecordId(record.id); setScreen('record'); }}>
+          <Text style={ui.cardTitle}>{record.sheet.assessmentTitle} • {record.sheet.className}</Text>
+          <Text style={ui.small}>{localStatus(record, operations)}</Text>
+          <Text style={ui.small}>{record.sheet.schoolName}</Text>
+        </Pressable>)}
+      </View> : null)}
       <Pressable style={ui.primary} onPress={() => changeTab('correct')}><Text style={ui.primaryText}>Nova captura</Text></Pressable>
     </>}
   </Screen>;

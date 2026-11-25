@@ -13,6 +13,20 @@ export function localStatus(record: LocalRecord, operations: Operation[]): strin
   if (operations.some(op => op.recordId === record.id && op.state !== 'blocked')) return 'Correção aguardando sincronização';
   return record.scan?.status === 'completed' ? record.grade?.requiresManualReview ? 'Discursivas pendentes' : 'Correção sincronizada' : record.scan?.status === 'review' ? 'Confira as marcações' : record.scan?.status === 'failed' ? 'Falha na leitura' : record.scan?.status === 'discarded' ? 'Descartada no servidor' : 'Aguardando leitura no servidor';
 }
+// Uma frase dizendo o que o professor faz agora com esta folha.
+export function nextStep(record: LocalRecord, operations: Operation[]): string {
+  const upload = operations.find(op => op.recordId === record.id && op.kind === 'upload');
+  if (upload?.state === 'blocked') return 'O servidor recusou esta foto. Veja o motivo abaixo.';
+  if (!record.remoteId) return 'A foto será enviada assim que houver conexão. Não precisa fazer nada.';
+  if (operations.some(op => op.recordId === record.id && op.state !== 'blocked')) return 'Sua revisão está sendo enviada. Aguarde a sincronização.';
+  switch (record.scan?.status) {
+    case 'review': return 'Confira o aluno e cada alternativa marcada, depois salve a revisão.';
+    case 'failed': return 'A leitura falhou. Reprocesse a foto no servidor.';
+    case 'discarded': return 'O servidor descartou esta folha (sem aluno identificado). Nenhuma ação é necessária.';
+    case 'completed': return record.grade?.requiresManualReview ? 'Falta corrigir as questões discursivas.' : 'Correção concluída.';
+    default: return 'Aguardando o servidor ler a folha. Sincronize para atualizar.';
+  }
+}
 export default function RecordScreen({ record, operations, store, connected, onSaved, onRefresh, onNext, onBack, onRetry, onNextPending }: {
   record: LocalRecord; operations: Operation[]; store: OfflineStore; connected: boolean;
   onSaved: () => Promise<void>; onRefresh: () => Promise<void>; onNext: () => void; onBack: () => void; onRetry: () => Promise<void>;
@@ -27,6 +41,7 @@ export default function RecordScreen({ record, operations, store, connected, onS
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [error, setError] = useState('');
+  const [showPhoto, setShowPhoto] = useState(false);
   const scan = record.scan;
   const context = { assessmentId: record.sheet.assessmentId, classId: record.sheet.classId, assessmentTitle: record.sheet.assessmentTitle, className: record.sheet.className };
   const candidates = scan?.candidates.filter(candidate => matchesContext(candidate, context)) ?? [];
@@ -59,12 +74,14 @@ export default function RecordScreen({ record, operations, store, connected, onS
     finally { lock.current = false; setBusy(false); }
   }
   return <>
-    <Text style={ui.title}>{localStatus(record, operations)}</Text>
-    <Text style={ui.text}>{record.sheet.assessmentTitle}</Text>
-    <Text style={ui.text}>{record.sheet.schoolName} • {record.sheet.className}</Text>
-    <Image source={{ uri: record.imageDataUrl }} style={ui.preview} resizeMode="contain" accessibilityLabel="Folha salva neste aparelho" />
-    <Text style={ui.small}>Foto e contexto salvos no aparelho.</Text>
-    {record.remoteId && <Text selectable style={ui.small}>Leitura: {record.remoteId}</Text>}
+    <View style={ui.card}>
+      <Text style={ui.small}>{record.sheet.assessmentTitle} • {record.sheet.className}</Text>
+      <Text style={ui.small}>{record.sheet.schoolName}</Text>
+      <Text style={ui.cardTitle}>{localStatus(record, operations)}</Text>
+      <Text style={ui.text}>{nextStep(record, operations)}</Text>
+    </View>
+    <Pressable accessibilityRole="button" style={ui.passwordToggle} onPress={() => setShowPhoto(value => !value)}><Text style={ui.linkText}>{showPhoto ? 'Ocultar foto' : 'Ver foto da folha'}</Text></Pressable>
+    {showPhoto && <Image source={{ uri: record.imageDataUrl }} style={ui.preview} resizeMode="contain" accessibilityLabel="Folha salva neste aparelho" />}
     {!connected && <Text style={ui.text}>Sem conexão. As alterações salvas serão sincronizadas quando a internet voltar.</Text>}
     {!!error && <Text accessibilityRole="alert" style={ui.error}>{error}</Text>}
     {operations.filter(op => op.recordId === record.id && op.error).map(op => <Text key={op.id} style={ui.error}>{op.state === 'blocked' ? 'Sincronização bloqueada: ' : 'Tentaremos novamente: '}{op.error}</Text>)}
@@ -102,10 +119,13 @@ export default function RecordScreen({ record, operations, store, connected, onS
         <Pressable disabled={!checked || !ready || busy || waiting} style={[ui.primary, (!checked || !ready || busy || waiting) && ui.disabled]} onPress={confirm}><Text style={ui.primaryText}>Salvar revisão para sincronizar</Text></Pressable>
       </>}
     </>}
-    <Pressable disabled={!connected || busy} style={[ui.secondary, (!connected || busy) && ui.disabled]} onPress={() => { void onRefresh().catch(err => setError(err.message)); }}><Text style={ui.buttonText}>Sincronizar e atualizar estado</Text></Pressable>
-    {(scan?.status === 'review' || scan?.status === 'failed') && scan.imageAvailable && !confirmation && <Pressable disabled={!connected || busy} style={[ui.secondary, (!connected || busy) && ui.disabled]} onPress={() => { void onRetry().catch(err => setError(err.message)); }}><Text style={ui.buttonText}>Reprocessar foto no servidor</Text></Pressable>}
+    <View style={ui.card}>
+      <Text style={ui.cardTitle}>Próximos passos</Text>
+      <Pressable disabled={!connected || busy} style={[ui.secondary, (!connected || busy) && ui.disabled]} onPress={() => { void onRefresh().catch(err => setError(err.message)); }}><Text style={ui.buttonText}>Sincronizar e atualizar estado</Text></Pressable>
+      {(scan?.status === 'review' || scan?.status === 'failed') && scan.imageAvailable && !confirmation && <Pressable disabled={!connected || busy} style={[ui.secondary, (!connected || busy) && ui.disabled]} onPress={() => { void onRetry().catch(err => setError(err.message)); }}><Text style={ui.buttonText}>Reprocessar foto no servidor</Text></Pressable>}
+    </View>
     {onNextPending && <Pressable disabled={busy} style={ui.primary} onPress={onNextPending}><Text style={ui.primaryText}>Próxima para revisar</Text></Pressable>}
     <Pressable disabled={busy} style={onNextPending ? ui.secondary : ui.primary} onPress={onNext}><Text style={onNextPending ? ui.buttonText : ui.primaryText}>Capturar próxima folha</Text></Pressable>
-    <Pressable disabled={busy} style={ui.secondary} onPress={onBack}><Text style={ui.buttonText}>Voltar às digitalizações</Text></Pressable>
+    <Pressable accessibilityRole="button" disabled={busy} style={ui.passwordToggle} onPress={onBack}><Text style={ui.linkText}>Voltar às digitalizações</Text></Pressable>
   </>;
 }
