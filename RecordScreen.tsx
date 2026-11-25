@@ -11,7 +11,7 @@ export function localStatus(record: LocalRecord, operations: Operation[]): strin
   if (upload?.state === 'blocked') return 'Envio precisa de revisão';
   if (!record.remoteId) return upload?.state === 'sending' ? 'Enviando foto…' : 'Salva no aparelho • Aguardando envio';
   if (operations.some(op => op.recordId === record.id && op.state !== 'blocked')) return 'Correção aguardando sincronização';
-  return record.scan?.status === 'completed' ? record.grade?.requiresManualReview ? 'Discursivas pendentes' : 'Correção sincronizada' : record.scan?.status === 'review' ? 'Confira as marcações' : record.scan?.status === 'failed' ? 'Falha na leitura' : 'Aguardando leitura no servidor';
+  return record.scan?.status === 'completed' ? record.grade?.requiresManualReview ? 'Discursivas pendentes' : 'Correção sincronizada' : record.scan?.status === 'review' ? 'Confira as marcações' : record.scan?.status === 'failed' ? 'Falha na leitura' : record.scan?.status === 'discarded' ? 'Descartada no servidor' : 'Aguardando leitura no servidor';
 }
 export default function RecordScreen({ record, operations, store, connected, onSaved, onRefresh, onNext, onBack, onRetry, onNextPending }: {
   record: LocalRecord; operations: Operation[]; store: OfflineStore; connected: boolean;

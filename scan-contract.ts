@@ -1,6 +1,7 @@
 export const labels = ['A', 'B', 'C', 'D', 'E'] as const;
 export type Label = typeof labels[number];
-export type ScanStatus = 'queued' | 'processing' | 'review' | 'failed' | 'completed';
+// 'discarded': cartão sem aluno identificado, descartado no servidor (ex.: QR ilegível).
+export type ScanStatus = 'queued' | 'processing' | 'review' | 'failed' | 'completed' | 'discarded';
 export type Answer = { questionNumber: number; selectedLabels: Label[]; status?: string };
 export type Question = { number: number; type: string; labels: Label[] };
 export type Candidate = {
@@ -61,7 +62,7 @@ function parseLabels(value: unknown): Label[] {
   return value as Label[];
 }
 export function parseStatus(value: unknown): ScanStatus {
-  if (!['queued', 'processing', 'review', 'failed', 'completed'].includes(String(value))) throw new Error('Status de leitura não reconhecido.');
+  if (!['queued', 'processing', 'review', 'failed', 'completed', 'discarded'].includes(String(value))) throw new Error('Status de leitura não reconhecido.');
   return value as ScanStatus;
 }
 export function parseScan(value: unknown): Scan {
