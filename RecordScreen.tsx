@@ -27,11 +27,20 @@ export function nextStep(record: LocalRecord, operations: Operation[]): string {
     default: return 'Aguardando o servidor ler a folha. Sincronize para atualizar.';
   }
 }
-export default function RecordScreen({ record, operations, store, connected, onSaved, onRefresh, onNext, onBack, onRetry, onNextPending }: {
+// Só dá para trocar a foto de um cartão com erro que ainda não tem aluno identificado (regra do servidor).
+export const canReplacePhoto = (record: LocalRecord, operations: Operation[]) => {
+  const scan = record.scan;
+  if (!scan || !record.remoteId) return false;
+  if (operations.some(op => op.recordId === record.id && op.state !== 'blocked')) return false;
+  return scan.status === 'failed' || (scan.status === 'review' && !scan.applicationStudentId);
+};
+export default function RecordScreen({ record, operations, store, connected, onSaved, onRefresh, onNext, onBack, onRetry, onNextPending, onReplace }: {
   record: LocalRecord; operations: Operation[]; store: OfflineStore; connected: boolean;
   onSaved: () => Promise<void>; onRefresh: () => Promise<void>; onNext: () => void; onBack: () => void; onRetry: () => Promise<void>;
   // Abre a próxima digitalização que espera revisão (fila de pendências).
   onNextPending?: () => void;
+  // Fotografa de novo esta folha com erro de leitura.
+  onReplace?: () => void;
 }) {
   const ui = useUi();
   const [candidateId, setCandidateId] = useState('');
@@ -123,6 +132,10 @@ export default function RecordScreen({ record, operations, store, connected, onS
       <Text style={ui.cardTitle}>Próximos passos</Text>
       <Pressable disabled={!connected || busy} style={[ui.secondary, (!connected || busy) && ui.disabled]} onPress={() => { void onRefresh().catch(err => setError(err.message)); }}><Text style={ui.buttonText}>Sincronizar e atualizar estado</Text></Pressable>
       {(scan?.status === 'review' || scan?.status === 'failed') && scan.imageAvailable && !confirmation && <Pressable disabled={!connected || busy} style={[ui.secondary, (!connected || busy) && ui.disabled]} onPress={() => { void onRetry().catch(err => setError(err.message)); }}><Text style={ui.buttonText}>Reprocessar foto no servidor</Text></Pressable>}
+      {onReplace && canReplacePhoto(record, operations) && <>
+        <Text style={ui.small}>Se a foto estiver ruim, tire outra. O cartão com erro é descartado depois que a nova foto for enviada.</Text>
+        <Pressable disabled={busy} style={ui.secondary} onPress={onReplace}><Text style={ui.buttonText}>Trocar foto desta folha</Text></Pressable>
+      </>}
     </View>
     {onNextPending && <Pressable disabled={busy} style={ui.primary} onPress={onNextPending}><Text style={ui.primaryText}>Próxima para revisar</Text></Pressable>}
     <Pressable disabled={busy} style={onNextPending ? ui.secondary : ui.primary} onPress={onNext}><Text style={onNextPending ? ui.buttonText : ui.primaryText}>Capturar próxima folha</Text></Pressable>

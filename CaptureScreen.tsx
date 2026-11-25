@@ -9,6 +9,8 @@ import { useUi } from './ui-styles';
 export type CapturedSheet = {
   photo: CameraCapturedPicture;
   applicationId?: string;
+  // Cartão com erro (já enviado) que esta foto substitui; é descartado após o envio.
+  replacesRemoteId?: string;
   schoolId: string;
   assessmentId: string;
   classId: string;

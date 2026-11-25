@@ -83,6 +83,8 @@ function TeacherApp() {
   const [records, setRecords] = useState<LocalRecord[]>([]);
   const [operations, setOperations] = useState<Operation[]>([]);
   const [recordId, setRecordId] = useState<string | null>(null);
+  // Troca de foto de um cartão com erro: a próxima foto substitui a folha desta digitalização.
+  const [replacing, setReplacing] = useState<{ recordId: string; remoteId: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   // Última aplicação usada, para "Continuar de onde parou".
   const [lastApplicationId, setLastApplicationId] = useState<string | null>(null);
@@ -282,6 +284,17 @@ function TeacherApp() {
     setLastApplicationId(item.id); setScreen('scan');
     if (account && store) await store.putCache(account.owner, 'application', item.id).catch(() => {});
   }
+  // Abre a câmera com o mesmo contexto da folha para trocar a foto dela.
+  function startReplacement(record: LocalRecord) {
+    if (!record.remoteId) return;
+    const application = applications.find(item => item.id === record.sheet.applicationId);
+    if (!application) { setMessage('Selecione a aplicação desta folha antes de trocar a foto.'); return; }
+    setSchool({ id: record.sheet.schoolId, name: record.sheet.schoolName });
+    setAssessment({ id: record.sheet.assessmentId, title: record.sheet.assessmentTitle });
+    setSchoolClass({ id: record.sheet.classId, name: record.sheet.className });
+    selectApplication(application); setSessionSaved(0); setMissing(null); setError(''); setMessage('');
+    setReplacing({ recordId: record.id, remoteId: record.remoteId }); setScreen('scan');
+  }
   async function loadMissing() {
     if (!client || !selectedApplication) return;
     try {
@@ -297,9 +310,13 @@ function TeacherApp() {
       const image = await prepareImage(sheet.photo);
       if (ownerRef.current !== account.owner) throw new Error('A conta mudou antes de salvar a captura.');
       if(!sheet.applicationId)throw Error('Selecione uma aplicação da prova antes de fotografar.');
-      await store.create(account.owner, sheet, image);
+      const replacement = replacing;
+      await store.create(account.owner, replacement ? { ...sheet, replacesRemoteId: replacement.remoteId } : sheet, image);
       await reload();
-      if (ownerRef.current === account.owner) { setSessionSaved(value => value + 1); setRecordId(null); Vibration.vibrate(60); }
+      if (replacement && ownerRef.current === account.owner) {
+        // Troca de foto: uma foto só. Volta para a folha; o envio descarta o cartão antigo.
+        setReplacing(null); setRecordId(replacement.recordId); setScreen('record'); setMessage('Foto nova salva. O cartão anterior será descartado quando a foto for enviada.'); Vibration.vibrate(60);
+      } else if (ownerRef.current === account.owner) { setSessionSaved(value => value + 1); setRecordId(null); Vibration.vibrate(60); }
     } finally { savingCapture.current = false; }
   }
   useEffect(() => {
@@ -426,8 +443,11 @@ function TeacherApp() {
         onReviewScan={scanId=>{const local=records.find(record=>record.remoteId===scanId);if(!local)return false;setRecordId(local.id);setScreen('record');return true;}} onBack={()=>setScreen('home')} />
     : screen === 'essays' && client ? <EssayScreen client={client} connected={connected} prepare={prepareImage} backRef={essayBack}
         onOpenPortal={() => void Linking.openURL(`${PORTAL_URL}/portal`).catch(() => setError('Não foi possível abrir o portal.'))} />
-    : screen === 'scan' && school && assessment && schoolClass ? <CaptureScreen applicationId={selectedApplication?.id} school={school} assessment={assessment} schoolClass={schoolClass} onConfirm={saveCapture} onBack={() => setScreen('home')} backLabel={sessionSaved ? 'Concluir captura' : 'Voltar'}
+    : screen === 'scan' && school && assessment && schoolClass ? <CaptureScreen applicationId={selectedApplication?.id} school={school} assessment={assessment} schoolClass={schoolClass} onConfirm={saveCapture}
+        onBack={() => { if (replacing) { setRecordId(replacing.recordId); setReplacing(null); setScreen('record'); } else setScreen('home'); }}
+        backLabel={replacing ? 'Cancelar troca' : sessionSaved ? 'Concluir captura' : 'Voltar'}
         header={<>
+          {replacing && <Notice tone="warning" icon="camera">Trocando a foto de uma folha com erro. Fotografe a folha de novo; o cartão anterior será descartado depois do envio.</Notice>}
           {sessionSaved > 0 && <Notice tone="success" icon="checkmark-circle">{sessionSaved} cartão(ões) salvo(s) nesta sessão. Fotografe o próximo.</Notice>}
           {scanProgress && <View style={ui.card}>
             <Text style={ui.cardTitle}>{scanProgress.completed} de {scanProgress.students} corrigidos</Text>
@@ -438,7 +458,8 @@ function TeacherApp() {
           </View>}
         </>} />
     : screen === 'record' && selectedRecord && store ? <RecordScreen key={selectedRecord.id} record={selectedRecord} operations={operations} store={store} connected={connected} onSaved={reload} onRefresh={refreshSelected} onRetry={retrySelected} onNext={() => nextCapture(selectedRecord)} onBack={() => setScreen('records')}
-        onNextPending={nextPending ? () => setRecordId(nextPending.id) : undefined} />
+        onNextPending={nextPending ? () => setRecordId(nextPending.id) : undefined}
+        onReplace={() => startReplacement(selectedRecord)} />
     : screen === 'account' ? <>
       <Header title="Conta" subtitle={account?.email} status={status} />{notices}
       <View style={ui.card}>

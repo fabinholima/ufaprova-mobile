@@ -80,6 +80,10 @@ export function createScanClient(apiUrl: string, token: () => Promise<string | n
       if (result.id !== id) throw new Error('A API retornou outra correção.');
       return result;
     },
+    // Tira da fila um cartão com erro (só o servidor decide se pode: sem aluno identificado).
+    async discard(id: string): Promise<void> {
+      await request(`/api/card-scans/${requireId(id)}/discard`, { method: 'POST' });
+    },
     async read(id: string, signal?: AbortSignal): Promise<Scan> {
       const scan = parseScan(await request(`/api/card-scans/${requireId(id)}`, {}, signal));
       if (scan.id !== id) throw new Error('A API retornou outra leitura.');

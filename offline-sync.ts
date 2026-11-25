@@ -27,6 +27,12 @@ export function createSynchronizer(store: OfflineStore, client: ScanClient, owne
         if (operation.kind === 'upload') {
           const created = await client.upload(record.imageDataUrl, record.id, record.sheet.applicationId);
           await store.acknowledge(owner, operation.id, record.id, { remoteId: created.id });
+          // Troca de foto: o cartão com erro sai da fila só depois que a nova foto chegou.
+          // Se o servidor não puder descartá-lo, a nova foto continua valendo.
+          if (record.sheet.replacesRemoteId) {
+            try { await client.discard(record.sheet.replacesRemoteId); }
+            catch (error) { if (!(error instanceof ScanApiError && error.status === 409)) report.error = 'A foto nova foi enviada, mas o cartão anterior ainda não foi descartado pelo servidor.'; }
+          }
         } else if (operation.kind === 'confirm') {
           if (!record.remoteId) throw new ScanApiError('A folha ainda não foi enviada.', false, 422);
           const payload = operation.payload as Confirmation;
