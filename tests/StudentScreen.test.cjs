@@ -16,11 +16,11 @@ test('approved student opens the photo screen for the linked record and sees the
  const Screen=loadScreen(async url=>Response.json({data:base(url,()=>[{id:'s1',name:'Aluno Silva',registration:'123',selfieDataUrl:photo}])}),props=>{opened=props;return null;});
  let component;await renderer.act(async()=>{component=renderer.create(React.createElement(Screen,{apiUrl:'https://api.example',onBack:()=>{}}));});t.after(()=>renderer.act(()=>component.unmount()));
  await renderer.act(async()=>component.root.findAllByType('Pressable').find(n=>text(n)==='Perfil').props.onPress());
- assert(text(component.root).includes('Matrícula: 123'));assert.equal(component.root.findAllByType('Image').length,0);
+ assert(text(component.root).includes('Matrícula: 123'));const photos=()=>component.root.findAllByType('Image').filter(n=>n.props.testID!=='brand-logo');assert.equal(photos().length,0);
  await renderer.act(async()=>component.root.findAllByType('Pressable').find(n=>text(n)==='Adicionar foto').props.onPress());
  assert.equal(opened.profile.id,'s1');assert.equal(opened.token,'student-token');
  photo='data:image/jpeg;base64,aGVsbG8=';await renderer.act(async()=>opened.onSaved());
- assert(text(component.root).includes('Foto salva no seu cadastro.'));assert.equal(component.root.findByType('Image').props.source.uri,photo);assert(text(component.root).includes('Trocar foto'));
+ assert(text(component.root).includes('Foto salva no seu cadastro.'));assert.equal(photos()[0].props.source.uri,photo);assert(text(component.root).includes('Trocar foto'));
 });
 test('students without an approved record are told when the photo becomes available and an older API keeps grades visible',async t=>{
  const previous=global.fetch;t.after(()=>global.fetch=previous);

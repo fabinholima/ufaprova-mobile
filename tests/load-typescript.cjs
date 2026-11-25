@@ -29,6 +29,7 @@ const reactNativeDefaults = {
   BackHandler: { addEventListener: () => ({ remove() {} }) },
   Vibration: { vibrate: () => {} },
   RefreshControl: 'RefreshControl',
+  Image: 'Image',
   StyleSheet: { create: (x) => x },
 };
 module.exports = function load(filename, mocks = {}) {
@@ -46,6 +47,8 @@ module.exports = function load(filename, mocks = {}) {
   const requireLocal = createRequire(filename);
   function requireDependency(name) {
     if (Object.hasOwn(mocks, name)) return mocks[name];
+    // Imagens (require('./assets/x.png')) viram um objeto simples nos testes.
+    if (/\.(png|jpe?g|gif|webp)$/i.test(name)) return { uri: name };
     if (name.startsWith('.')) { const source = ['.ts', '.tsx'].map(extension => path.resolve(path.dirname(filename), `${name}${extension}`)).find(file => fs.existsSync(file)); if (source) return load(source, mocks); }
     return requireLocal(name);
   }

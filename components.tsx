@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useColors, radius, space } from './theme';
@@ -43,7 +43,10 @@ export function Header({ title, subtitle, onBack, status }: { title: string; sub
           <Text style={ui.linkText}>Voltar</Text>
         </Pressable>
       ) : (
-        <Text style={ui.eyebrow}>UFA PROVA</Text>
+        <View accessible accessibilityLabel="UFA Prova" style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+          <Image testID="brand-logo" source={require('./assets/logo-mark.png')} style={{ width: 28, height: 28 }} />
+          <Text style={ui.eyebrow}>UFA PROVA</Text>
+        </View>
       )}
       {!!status && <Text numberOfLines={1} style={[ui.small, { marginTop: 0, flexShrink: 1, textAlign: 'right' }]}>{status}</Text>}
       </View>
