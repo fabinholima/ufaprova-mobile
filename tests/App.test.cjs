@@ -75,7 +75,7 @@ test('a student identity opens the student panel instead of teacher correction t
 test('native coordinator signup returns to login with the email filled and never saves a session',async t=>{
  const previous=global.fetch;t.after(()=>global.fetch=previous);let calls=0;
  global.fetch=async(url,options)=>{assert(url.endsWith('/api/auth/register'));assert.equal(options.headers['x-client'],'mobile');const payload=JSON.parse(options.body);assert.equal(payload.educatorProfile.professionalRole,'coordinator');assert.deepEqual(payload.educatorProfile.stages,['Ensino Médio']);assert.equal(payload.role,undefined);calls++;return Response.json({data:{verificationRequired:true}});};
- const h=await setup(t,{login:true});await h.press('Criar conta de professor/coordenador');await h.press('Coordenador');await h.press('Ensino Médio');
+ const h=await setup(t,{login:true});await h.press('Criar conta de professor ou coordenador');await h.press('Coordenador');await h.press('Ensino Médio');
  for(const [label,value] of [['Nome completo','Coordenador Teste'],['E-mail do professor ou coordenador','coord@example.test'],['CPF','12345678909'],['Senha para nova conta','TestPassword123!'],['Confirmar senha','TestPassword123!'],['Nome da escola','Escola Teste'],['Endereço da escola','Rua Teste, 1'],['Cidade da escola','Campo Grande'],['Estado da escola (UF)','MS']])await renderer.act(async()=>h.component.root.findAllByType('TextInput').find(n=>n.props.accessibilityLabel===label).props.onChangeText(value));
  await h.press('Criar minha conta');assert.equal(calls,1);assert.equal(h.credentials,null);assert(text(h.component.root).includes('Confirme o link enviado ao seu e-mail'));assert.equal(h.component.root.findAllByType('TextInput').find(n=>n.props.accessibilityLabel==='E-mail').props.value,'coord@example.test');
 });
@@ -93,7 +93,7 @@ test('on the web the aluno subdomain opens the student area directly',async t=>{
 });
 test('on the professor subdomain the student entry goes to the student site',async t=>{
   const h=await setup(t,{login:true,hostProfile:'teacher'});
-  await h.press('Sou aluno · abrir área do aluno');
+  await h.press('Sou aluno: entrar na área do aluno');
   assert.deepEqual(h.switched,['student']);
   assert.doesNotMatch(text(h.component.root),/Painel do aluno/);
 });
@@ -109,7 +109,7 @@ test('an assessment with an incomplete answer key shows the versions and cannot 
   const h=await setup(t,{application:{subject:'Química',versions:[{code:'A',questions:10,objective:10,missingAnswerKeys:[3,7]}],answerKeyReady:false}});
   await h.press('Prova');
   const screen=text(h.component.root);
-  assert.match(screen,/Química · Turma/);assert.match(screen,/1 de 1 corrigidos/);
+  assert.match(screen,/Química, Turma/);assert.match(screen,/1 de 1 corrigidos/);
   assert.match(screen,/10 questões · gabarito versão A/);
   assert.match(screen,/Gabarito incompleto na versão A \(questões 3, 7\)/);
   assert.equal(button(h.component,'Fotografar cartões').props.disabled,true);
