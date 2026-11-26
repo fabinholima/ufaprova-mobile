@@ -3,7 +3,9 @@ import { answerKeyLine, answerKeyProblem } from "./application-contract";
 import type { CorrectionApplication } from "./application-contract";
 import type { LocalRecord } from "./offline-store";
 import { applicationProgress, sortApplications } from "./teacher-dashboard";
-import { EmptyState, Notice, ProgressBar } from "./components";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { BubbleProgress, EmptyState, Notice } from "./components";
+import { space, tabular, useColors } from "./theme";
 import { useUi } from "./ui-styles";
 
 type Props = {
@@ -27,55 +29,64 @@ type Props = {
 // Painel da aba Corrigir: escola, pendências, "continuar de onde parou" e as
 // aplicações com o progresso da correção.
 export default function TeacherHome(props: Props) {
-  const ui = useUi();
+  const ui = useUi(), c = useColors();
   const { applications, records, selectedId } = props;
   const sorted = sortApplications(applications);
   const last = sorted.find((a) => a.id === props.lastApplicationId && a.status !== "closed");
   const progressLine = (a: CorrectionApplication) => {
     const p = applicationProgress(a, records);
-    return { p, text: `${p.completed} de ${p.students} corrigidos${p.waiting ? ` · ${p.waiting} no aparelho aguardando envio` : ""}` };
+    return { p, text: `${p.completed} de ${p.students} corrigidos`, waiting: p.waiting ? `${p.waiting} no aparelho aguardando envio` : "" };
   };
+  const progress = (a: CorrectionApplication) => {
+    const { p, text, waiting } = progressLine(a);
+    return (
+      <>
+        <BubbleProgress completed={p.completed} waiting={p.waiting} students={a.students} label={waiting ? `${text}, ${waiting}` : text} />
+        <Text style={[ui.small, { marginTop: space.sm }]}>
+          <Text style={{ color: c.text, fontWeight: "700", ...tabular }}>{text}</Text>
+          {!!waiting && <Text style={tabular}>{` · ${waiting}`}</Text>}
+        </Text>
+      </>
+    );
+  };
+  const captureDisabled = (a: CorrectionApplication) => props.busy || !!answerKeyProblem(a);
   return (
     <>
-      <View style={[ui.card, { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}>
-        <View style={{ flex: 1 }}>
-          <Text style={ui.small}>Escola</Text>
-          <Text style={ui.cardTitle}>{props.schoolName || "Nenhuma escola selecionada"}</Text>
-        </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.sm }}>
+        <Ionicons name="school-outline" size={18} color={c.textMuted} />
+        <Text numberOfLines={1} style={[ui.small, { marginTop: 0, flex: 1, color: c.text, fontWeight: "600" }]}>
+          {props.schoolName || "Nenhuma escola selecionada"}
+        </Text>
         {props.canChangeSchool && (
-          <Pressable accessibilityRole="button" onPress={props.onChangeSchool} style={ui.passwordToggle}>
+          <Pressable accessibilityRole="button" onPress={props.onChangeSchool} hitSlop={8} style={({ pressed }) => [{ minHeight: 44, justifyContent: "center" }, pressed && ui.pressed]}>
             <Text style={ui.linkText}>Trocar escola</Text>
           </Pressable>
         )}
       </View>
       {props.attention > 0 && (
-        <Notice tone="warning" icon="alert-circle">
+        <Notice tone="warning" icon="alert-circle" action={{ label: "Revisar", onPress: props.onOpenAttention }}>
           {props.attention} digitalização(ões) esperam sua revisão.
         </Notice>
       )}
-      {props.attention > 0 && (
-        <Pressable accessibilityRole="button" style={ui.secondary} onPress={props.onOpenAttention}>
-          <Text style={ui.buttonText}>Revisar pendências ({props.attention})</Text>
-        </Pressable>
-      )}
       {last && (
-        <View style={[ui.card, ui.selected]}>
-          <Text style={ui.small}>Continuar de onde parou</Text>
-          <Text style={ui.cardTitle}>{last.title}</Text>
+        <View style={[ui.card, { borderColor: c.accent, borderWidth: 2, padding: space.lg - 1 }]}>
+          <Text style={[ui.small, { marginTop: 0, color: c.accent, fontWeight: "600" }]}>Continuar de onde parou</Text>
+          <Text style={[ui.cardTitle, { marginTop: space.xs }]}>{last.title}</Text>
           <Text style={ui.small}>{last.className}</Text>
-          <ProgressBar value={progressLine(last).p.completed} max={last.students} label={progressLine(last).text} />
-          <Text style={ui.small}>{progressLine(last).text}</Text>
+          {progress(last)}
           <Pressable
             accessibilityRole="button"
-            disabled={props.busy || !!answerKeyProblem(last)}
-            style={[ui.primary, (props.busy || !!answerKeyProblem(last)) && ui.disabled]}
+            disabled={captureDisabled(last)}
+            style={({ pressed }) => [ui.primary, captureDisabled(last) && ui.disabled, pressed && ui.pressed]}
             onPress={() => props.onCapture(last)}
           >
             <Text style={ui.primaryText}>Continuar captura</Text>
           </Pressable>
         </View>
       )}
-      <Text style={ui.title}>Aplicações</Text>
+      <Text accessibilityRole="header" style={ui.sectionTitle}>
+        Aplicações{sorted.length ? <Text style={ui.count}>{`  ${sorted.length}`}</Text> : null}
+      </Text>
       <Text style={ui.small}>Use o cartão com QR Code gerado no portal. Confira também a escola impressa no cartão.</Text>
       {!sorted.length && (
         <EmptyState
@@ -90,24 +101,33 @@ export default function TeacherHome(props: Props) {
       )}
       {sorted.map((a) => {
         const selected = a.id === selectedId;
-        const { p, text } = progressLine(a);
         const problem = answerKeyProblem(a);
+        const closed = a.status === "closed";
+        // O cartão é um contêiner; só o topo seleciona, e as ações ficam dentro dele.
         return (
-          <View key={a.id}>
-            <Pressable accessibilityRole="radio" accessibilityState={{ selected }} style={[ui.card, selected && ui.selected]} onPress={() => props.onSelect(a)}>
-              <Text style={ui.cardTitle}>{a.title}</Text>
-              <Text style={ui.small}>{[a.subject, a.className, a.status === "closed" ? "Encerrada" : null].filter(Boolean).join(" · ")}</Text>
-              <ProgressBar value={p.completed} max={a.students} label={text} />
-              <Text style={ui.small}>{text}</Text>
+          <View key={a.id} style={[ui.card, { padding: 0, overflow: "hidden" }, selected && { borderColor: c.accent, borderWidth: 2 }]}>
+            <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              onPress={() => props.onSelect(a)}
+              style={({ pressed }) => [{ padding: selected ? space.lg - 1 : space.lg }, pressed && { backgroundColor: c.surfaceMuted }]}
+            >
+              <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space.sm }}>
+                <Text style={[ui.cardTitle, { flex: 1 }]}>{a.title}</Text>
+                {closed && <Text style={[ui.small, { marginTop: 2, fontWeight: "600" }]}>Encerrada</Text>}
+                <Ionicons name={selected ? "chevron-up" : "chevron-down"} size={20} color={c.textMuted} />
+              </View>
+              <Text style={ui.small}>{[a.subject, a.className].filter(Boolean).join(", ")}</Text>
+              {progress(a)}
               {!!answerKeyLine(a) && <Text style={ui.small}>{answerKeyLine(a)}</Text>}
-              {!!problem && <Text style={ui.error}>{problem}</Text>}
+              {!!problem && <Notice tone="danger" icon="key">{problem}</Notice>}
             </Pressable>
             {selected && (
-              <>
+              <View style={{ paddingHorizontal: space.lg - 1, paddingBottom: space.lg - 1, borderTopWidth: 1, borderTopColor: c.border }}>
                 <Pressable
                   accessibilityRole="button"
                   disabled={props.busy || !!problem}
-                  style={[ui.primary, (props.busy || !!problem) && ui.disabled]}
+                  style={({ pressed }) => [ui.primary, (props.busy || !!problem) && ui.disabled, pressed && ui.pressed]}
                   onPress={() => props.onCapture(a)}
                 >
                   <Text style={ui.primaryText}>Fotografar cartões</Text>
@@ -115,13 +135,13 @@ export default function TeacherHome(props: Props) {
                 <Pressable
                   accessibilityRole="button"
                   disabled={!props.connected}
-                  style={[ui.secondary, !props.connected && ui.disabled]}
+                  style={({ pressed }) => [ui.secondary, !props.connected && ui.disabled, pressed && ui.pressed]}
                   onPress={() => props.onResults(a)}
                 >
                   <Text style={ui.buttonText}>Revisar e autorizar resultados</Text>
                 </Pressable>
-                {!props.connected && <Text style={ui.small}>A revisão e a autorização dos resultados exigem conexão.</Text>}
-              </>
+                {!props.connected && <Text style={[ui.small, { marginTop: space.sm }]}>A revisão e a autorização dos resultados exigem conexão.</Text>}
+              </View>
             )}
           </View>
         );

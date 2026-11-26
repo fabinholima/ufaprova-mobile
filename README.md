@@ -185,7 +185,7 @@ A API requer as migrações `070_class_invites.sql` e `071_student_accounts_clas
 
 ## Cadastro de professor e coordenador no aplicativo
 
-Na entrada, use **Criar conta de professor/coordenador**. Escolha o perfil, informe nome, e-mail, CPF, senha e a primeira escola. Professores informam disciplinas e séries; coordenadores selecionam as etapas de ensino. O servidor cria conta, perfil e escola na mesma transação. Confirme o e-mail pelo link recebido e entre no aplicativo. Escolher Coordenador define o perfil profissional; não concede permissões sobre outras escolas nem administração geral.
+Na entrada, use **Criar conta de professor ou coordenador**. Escolha o perfil, informe nome, e-mail, CPF, senha e a primeira escola. Professores informam disciplinas e séries; coordenadores selecionam as etapas de ensino. O servidor cria conta, perfil e escola na mesma transação. Confirme o e-mail pelo link recebido e entre no aplicativo. Escolher Coordenador define o perfil profissional; não concede permissões sobre outras escolas nem administração geral.
 
 ## Correção de cartões objetivos pelo celular
 

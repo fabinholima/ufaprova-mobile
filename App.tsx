@@ -27,7 +27,9 @@ import { ScanApiError } from './scan-api';
 import {answerKeyProblem,parseApplications} from './application-contract';
 import type {CorrectionApplication} from './application-contract';
 import { useUi } from './ui-styles';
-import { Chip, EmptyState, Header, Loading, Notice, ProgressBar, Screen, TabBar } from './components';
+import { BubbleProgress, Chip, EmptyState, Header, Loading, Notice, Screen, TabBar } from './components';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { space, tabular, useColors } from './theme';
 import TeacherHome from './TeacherHome';
 import { applicationProgress, needsAttention } from './teacher-dashboard';
 import type { Tab } from './components';
@@ -49,7 +51,7 @@ export default function App() {
 }
 
 function TeacherApp() {
-  const ui = useUi();
+  const ui = useUi(), c = useColors();
   const [educatorRegistration,setEducatorRegistration]=useState(false);
   const [studentAccess,setStudentAccess]=useState(false);
   useEffect(()=>{void SecureStore.getItemAsync(STUDENT_SESSION_KEY).then(raw=>{if(raw){const value=JSON.parse(raw);if(typeof value.token==='string'&&sameApi(value.apiUrl))setStudentAccess(true);}}).catch(()=>{});},[]);
@@ -366,25 +368,36 @@ function TeacherApp() {
   </Screen>;
   if(studentAccess||hostProfile==='student')return <StudentScreen apiUrl={API_URL} onBack={()=>setStudentAccess(false)} onTeacherArea={hostProfile==='student'?()=>switchProfile('teacher'):undefined} />;
   if (booting || screen === 'login') return <Screen>
-    <Header title="Correção de avaliações" />
+    <Header title="Correção de avaliações" subtitle="Entrada de professores e coordenadores" />
     {booting ? <Loading label="Abrindo dados locais" /> : <>
-      <Pressable accessibilityRole="button" style={ui.secondary} onPress={()=>hostProfile==='teacher'?switchProfile('student'):setStudentAccess(true)}><Text style={ui.buttonText}>{hostProfile==='teacher'?'Sou aluno · abrir área do aluno':'Sou aluno · entrar ou criar conta'}</Text></Pressable>
-      <Text style={ui.text}>{PERSISTENT_STORE ? 'Entre uma vez com internet. Depois, as escolas, avaliações e turmas já carregadas ficam disponíveis neste aparelho.' : 'No navegador, nada da escola fica salvo no aparelho: as fotos ficam só nesta aba até serem enviadas.'}</Text>
-      <TextInput style={ui.input} accessibilityLabel="E-mail" autoCapitalize="none" keyboardType="email-address" placeholder="E-mail" placeholderTextColor={ui.small.color} value={email} onChangeText={setEmail} />
-      <TextInput style={ui.input} accessibilityLabel="Senha" secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder="Senha" placeholderTextColor={ui.small.color} value={password} onChangeText={setPassword} />
-      <Pressable accessibilityRole="button" accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'} style={ui.passwordToggle} onPress={() => setShowPassword(value => !value)}><Text style={ui.linkText}>{showPassword ? 'Ocultar senha' : 'Mostrar senha'}</Text></Pressable>
-      <Pressable accessibilityRole="button" disabled={loading} style={ui.passwordToggle} onPress={()=>{setError('');setMessage('');void requestPasswordReset(API_URL,email).then(setMessage,err=>setError(err instanceof Error?err.message:'Não foi possível pedir uma nova senha.'));}}><Text style={ui.linkText}>Esqueci minha senha</Text></Pressable>
+      <TextInput style={[ui.input, { marginTop: space.xl }]} accessibilityLabel="E-mail" autoCapitalize="none" keyboardType="email-address" autoComplete="email" placeholder="E-mail" placeholderTextColor={ui.small.color} value={email} onChangeText={setEmail} />
+      {/* Senha com o botão Mostrar/Ocultar dentro do campo. */}
+      <View style={[ui.input, { flexDirection: 'row', alignItems: 'center', paddingVertical: 0, paddingRight: space.xs }]}>
+        <TextInput style={{ flex: 1, minWidth: 0, fontSize: 16, color: ui.input.color, paddingVertical: 14 }} accessibilityLabel="Senha" secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder="Senha" placeholderTextColor={ui.small.color} value={password} onChangeText={setPassword} />
+        <Pressable accessibilityRole="button" accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'} style={({ pressed }) => [{ minHeight: 44, justifyContent: 'center', paddingHorizontal: space.md }, pressed && ui.pressed]} onPress={() => setShowPassword(value => !value)}><Text style={ui.linkText}>{showPassword ? 'Ocultar senha' : 'Mostrar senha'}</Text></Pressable>
+      </View>
       {!!error && <Notice tone="danger">{error}</Notice>}
-      <Pressable disabled={loading || !store || !!googleAttempt} style={[ui.primary, (loading || !store || !!googleAttempt) && ui.disabled]} onPress={signIn}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={ui.primaryText}>Entrar</Text>}</Pressable>
-      <Text style={ui.separator}>ou</Text>
-      <Pressable accessibilityRole="button" disabled={loading || !store || !!googleAttempt} style={[ui.secondary, (loading || !store || !!googleAttempt) && ui.disabled]} onPress={googleSignIn}><Text style={ui.buttonText}>Entrar com Google</Text></Pressable>
+      <Pressable accessibilityRole="button" disabled={loading || !store || !!googleAttempt} style={({ pressed }) => [ui.primary, (loading || !store || !!googleAttempt) && ui.disabled, pressed && ui.pressed]} onPress={signIn}>{loading ? <ActivityIndicator color="#fff" /> : <Text style={ui.primaryText}>Entrar</Text>}</Pressable>
+      <Pressable accessibilityRole="button" disabled={loading} style={({ pressed }) => [ui.passwordToggle, { alignSelf: 'center' }, pressed && ui.pressed]} onPress={()=>{setError('');setMessage('');void requestPasswordReset(API_URL,email).then(setMessage,err=>setError(err instanceof Error?err.message:'Não foi possível pedir uma nova senha.'));}}><Text style={ui.linkText}>Esqueci minha senha</Text></Pressable>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.sm }}>
+        <View style={{ flex: 1, height: 1, backgroundColor: ui.card.borderColor }} />
+        <Text style={[ui.small, { marginTop: 0 }]}>ou</Text>
+        <View style={{ flex: 1, height: 1, backgroundColor: ui.card.borderColor }} />
+      </View>
+      <Pressable accessibilityRole="button" disabled={loading || !store || !!googleAttempt} style={({ pressed }) => [ui.secondary, (loading || !store || !!googleAttempt) && ui.disabled, pressed && ui.pressed]} onPress={googleSignIn}><Text style={ui.buttonText}>Entrar com Google</Text></Pressable>
       {!!message && <Notice>{message}</Notice>}
       {!!googleAttempt && <>
         <Pressable disabled={loading} style={ui.secondary} onPress={() => { void finishGoogleSignIn(); }}><Text style={ui.buttonText}>Concluir entrada com Google</Text></Pressable>
-        <Pressable disabled={loading} style={ui.passwordToggle} onPress={cancelGoogle}><Text style={ui.linkText}>Cancelar entrada com Google</Text></Pressable>
+        <Pressable disabled={loading} style={[ui.passwordToggle, { alignSelf: 'center' }]} onPress={cancelGoogle}><Text style={ui.linkText}>Cancelar entrada com Google</Text></Pressable>
       </>}
-      <Pressable accessibilityRole="button" disabled={loading||!!googleAttempt} style={ui.secondary} onPress={()=>setEducatorRegistration(true)}><Text style={ui.buttonText}>Criar conta de professor/coordenador</Text></Pressable>
+      <Text style={[ui.small, { marginTop: space.lg }]}>{PERSISTENT_STORE ? 'Entre uma vez com internet. Depois, as escolas, avaliações e turmas já carregadas ficam disponíveis neste aparelho.' : 'No navegador, nada da escola fica salvo no aparelho: as fotos ficam só nesta aba até serem enviadas.'}</Text>
       {!store && <Pressable style={ui.secondary} onPress={() => { void initialize(); }}><Text style={ui.buttonText}>Reabrir armazenamento local</Text></Pressable>}
+      {/* Outras entradas, separadas do formulário do professor. */}
+      <View style={{ marginTop: 'auto', paddingTop: space.xl }}>
+        <View style={{ height: 1, backgroundColor: ui.card.borderColor, marginBottom: space.xs }} />
+        <Pressable accessibilityRole="button" style={({ pressed }) => [ui.secondary, pressed && ui.pressed]} onPress={()=>hostProfile==='teacher'?switchProfile('student'):setStudentAccess(true)}><Text style={ui.buttonText}>Sou aluno: entrar na área do aluno</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={loading||!!googleAttempt} style={({ pressed }) => [ui.secondary, (loading||!!googleAttempt) && ui.disabled, pressed && ui.pressed]} onPress={()=>setEducatorRegistration(true)}><Text style={ui.buttonText}>Criar conta de professor ou coordenador</Text></Pressable>
+      </View>
     </>}
   </Screen>;
   const pending = operations.length;
@@ -395,7 +408,7 @@ function TeacherApp() {
     { key: 'account', label: 'Conta', icon: 'person-circle' },
   ];
   const back = parentOf[screen] ? () => setScreen(parentOf[screen]!) : undefined;
-  const status = `${account?.displayName} • ${connected ? 'Conectado' : 'Sem conexão'}${syncing ? ' • Sincronizando…' : ''}`;
+  const status = !connected ? 'Sem conexão' : syncing ? 'Sincronizando…' : 'Conectado';
   // Telas com cabeçalho próprio do App mostram a conta e a conexão nele.
   const ownHeader = screen === 'home' || screen === 'schools' || screen === 'account' || screen === 'records';
   const attentionRecords = records.filter(record => needsAttention(record, operations));
@@ -424,7 +437,7 @@ function TeacherApp() {
     {!ownHeader && <Text style={ui.small}>{status}</Text>}
     {!ownHeader && notices}
     {screen === 'home' ? <>
-      <Header title="Corrigir" status={status} />{notices}
+      <Header title="Corrigir" status={status} online={connected} />{notices}
       {loading && <Loading label="Atualizando listas" />}
       <TeacherHome
         schoolName={school?.name ?? null} canChangeSchool={schools.length !== 1} onChangeSchool={() => setScreen('schools')}
@@ -436,9 +449,9 @@ function TeacherApp() {
         onOpenPortal={() => void Linking.openURL(`${PORTAL_URL}/portal`).catch(() => setError('Não foi possível abrir o portal.'))}
       />
     </> : screen === 'schools' ? <>
-      <Header title="Selecione a escola" onBack={back} status={status} />{notices}
+      <Header title="Selecione a escola" onBack={back} status={status} online={connected} />{notices}
       {!schools.length && <EmptyState icon="school" title="Nenhuma escola neste aparelho" text="Conecte-se para carregar seu cadastro." />}
-      {schools.map(item => <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{ selected: school?.id === item.id }} style={[ui.card, school?.id === item.id && ui.selected]} onPress={() => { void chooseSchool(item).catch(err => setError(err.message)); }}><Text style={ui.cardTitle}>{item.name}</Text><Text style={ui.small}>{[item.city, item.state].filter(Boolean).join(' • ')}</Text></Pressable>)}
+      {schools.map(item => <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{ selected: school?.id === item.id }} style={[ui.card, school?.id === item.id && ui.selected]} onPress={() => { void chooseSchool(item).catch(err => setError(err.message)); }}><Text style={ui.cardTitle}>{item.name}</Text><Text style={ui.small}>{[item.city, item.state].filter(Boolean).join(', ')}</Text></Pressable>)}
     </> : screen === 'results' && selectedApplication && client ? <ResultsScreen key={selectedApplication.id} client={client} applicationId={selectedApplication.id} connected={connected} newId={Crypto.randomUUID}
         onReviewScan={scanId=>{const local=records.find(record=>record.remoteId===scanId);if(!local)return false;setRecordId(local.id);setScreen('record');return true;}} onBack={()=>setScreen('home')} />
     : screen === 'essays' && client ? <EssayScreen client={client} connected={connected} prepare={prepareImage} backRef={essayBack}
@@ -450,8 +463,8 @@ function TeacherApp() {
           {replacing && <Notice tone="warning" icon="camera">Trocando a foto de uma folha com erro. Fotografe a folha de novo; o cartão anterior será descartado depois do envio.</Notice>}
           {sessionSaved > 0 && <Notice tone="success" icon="checkmark-circle">{sessionSaved} cartão(ões) salvo(s) nesta sessão. Fotografe o próximo.</Notice>}
           {scanProgress && <View style={ui.card}>
-            <Text style={ui.cardTitle}>{scanProgress.completed} de {scanProgress.students} corrigidos</Text>
-            <ProgressBar value={scanProgress.completed} max={scanProgress.students} label={`${scanProgress.completed} de ${scanProgress.students} corrigidos`} />
+            <Text style={[ui.cardTitle, tabular]}>{scanProgress.completed} de {scanProgress.students} corrigidos</Text>
+            <BubbleProgress completed={scanProgress.completed} waiting={scanProgress.waiting} students={scanProgress.students} label={`${scanProgress.completed} de ${scanProgress.students} corrigidos`} />
             {!!scanProgress.waiting && <Text style={ui.small}>{scanProgress.waiting} foto(s) no aparelho aguardando envio.</Text>}
             {connected && missing === null && <Pressable accessibilityRole="button" style={ui.passwordToggle} onPress={() => { void loadMissing(); }}><Text style={ui.linkText}>Ver quem falta</Text></Pressable>}
             {missing !== null && <Text style={ui.small}>{missing.length ? `Faltam: ${missing.join(', ')}.` : 'Todos os alunos já têm cartão corrigido.'}</Text>}
@@ -461,7 +474,7 @@ function TeacherApp() {
         onNextPending={nextPending ? () => setRecordId(nextPending.id) : undefined}
         onReplace={() => startReplacement(selectedRecord)} />
     : screen === 'account' ? <>
-      <Header title="Conta" subtitle={account?.email} status={status} />{notices}
+      <Header title="Conta" subtitle={account && account.displayName !== account.email ? `${account.displayName}, ${account.email}` : account?.email} status={status} online={connected} />{notices}
       <View style={ui.card}>
         <Text style={ui.cardTitle}>Sincronização</Text>
         <Text style={ui.small}>{pending ? `${pending} alteração(ões) ainda não sincronizada(s).` : 'Tudo sincronizado neste aparelho.'}</Text>
@@ -471,7 +484,7 @@ function TeacherApp() {
       <Pressable style={ui.secondary} onPress={() => { void signOut(); }}><Text style={ui.buttonText}>Sair da conta</Text></Pressable>
       {account && connected && <DeleteAccount request={async (path, input) => createStudentClient(account.apiUrl, await sessionToken(account))(path, input)} onDeleted={async () => { await store?.clearOwner(account.owner); await signOut(); }} />}
     </> : <>
-      <Header title="Digitalizações salvas" subtitle={pending ? `${pending} alteração(ões) aguardando sincronização.` : undefined} status={status} />{notices}
+      <Header title="Digitalizações salvas" subtitle={pending ? `${pending} alteração(ões) aguardando sincronização.` : undefined} status={status} online={connected} />{notices}
       {records.length > 0 && <View style={ui.options}>
         <Chip label={`Todas (${records.length})`} selected={recordsFilter === 'all'} onPress={() => setRecordsFilter('all')} />
         <Chip label={`Precisam de revisão (${attentionRecords.length})`} selected={recordsFilter === 'attention'} onPress={() => setRecordsFilter('attention')} />
@@ -480,11 +493,14 @@ function TeacherApp() {
       {!!records.length && !shownRecords.length && <EmptyState icon="checkmark-done" title="Nada para revisar" text="Todas as digitalizações estão em dia." />}
       {/* Primeiro o que pede ação; depois o que o servidor ainda processa; por fim o concluído. */}
       {sections.map(([title, list]) => list.length ? <View key={title}>
-        <Text style={ui.eyebrow}>{title} ({list.length})</Text>
-        {list.map(record => <Pressable key={record.id} accessibilityRole="button" style={ui.card} onPress={() => { setRecordId(record.id); setScreen('record'); }}>
-          <Text style={ui.cardTitle}>{record.sheet.assessmentTitle} • {record.sheet.className}</Text>
-          <Text style={ui.small}>{localStatus(record, operations)}</Text>
-          <Text style={ui.small}>{record.sheet.schoolName}</Text>
+        <Text accessibilityRole="header" style={ui.sectionTitle}>{title}<Text style={ui.count}>{`  ${list.length}`}</Text></Text>
+        {list.map(record => <Pressable key={record.id} accessibilityRole="button" style={({ pressed }) => [ui.card, { flexDirection: 'row', alignItems: 'center', gap: space.md }, pressed && { backgroundColor: c.surfaceMuted }]} onPress={() => { setRecordId(record.id); setScreen('record'); }}>
+          <View style={{ flex: 1 }}>
+            <Text style={ui.cardTitle}>{record.sheet.assessmentTitle}</Text>
+            <Text style={ui.small}>{record.sheet.className}, {record.sheet.schoolName}</Text>
+            <Text style={[ui.small, { color: title === 'Precisam da sua atenção' ? c.warning : title === 'Concluídas' ? c.success : c.text, fontWeight: '600' }]}>{localStatus(record, operations)}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={c.textMuted} />
         </Pressable>)}
       </View> : null)}
       <Pressable style={ui.primary} onPress={() => changeTab('correct')}><Text style={ui.primaryText}>Nova captura</Text></Pressable>

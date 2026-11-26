@@ -13,6 +13,8 @@ export type Palette = {
   primaryText: string;
   accent: string;
   accentSoft: string;
+  // Âmbar da bolha marcada (logo e progresso).
+  mark: string;
   danger: string;
   dangerSoft: string;
   success: string;
@@ -21,46 +23,53 @@ export type Palette = {
   warningSoft: string;
 };
 
+// Paleta do cartão-resposta: papel frio, grafite, tinta azul da marca e o
+// âmbar da bolha preenchida (só em preenchimentos, nunca em texto).
 export const light: Palette = {
-  background: '#f8fafc',
+  background: '#f3f5f8',
   surface: '#ffffff',
-  surfaceMuted: '#f1f5f9',
-  border: '#cbd5e1',
-  text: '#0f172a',
-  textMuted: '#475569',
-  primary: '#1d4ed8',
+  surfaceMuted: '#e9edf2',
+  border: '#d5dbe3',
+  text: '#18202b',
+  textMuted: '#4f5b6b',
+  primary: '#1e40af',
   primaryText: '#ffffff',
-  accent: '#1d4ed8',
-  accentSoft: '#eff6ff',
-  danger: '#b91c1c',
-  dangerSoft: '#fef2f2',
-  success: '#15803d',
-  successSoft: '#f0fdf4',
-  warning: '#b45309',
-  warningSoft: '#fffbeb',
+  accent: '#1e40af',
+  accentSoft: '#e8eefc',
+  mark: '#f5a524',
+  danger: '#b42318',
+  dangerSoft: '#fdeceb',
+  success: '#157347',
+  successSoft: '#e7f5ee',
+  warning: '#9a5b00',
+  warningSoft: '#fdf3e1',
 };
 
 export const dark: Palette = {
-  background: '#0b1120',
-  surface: '#111827',
-  surfaceMuted: '#1f2937',
-  border: '#334155',
-  text: '#f1f5f9',
-  textMuted: '#cbd5e1',
-  primary: '#2563eb',
+  background: '#0e141c',
+  surface: '#16202b',
+  surfaceMuted: '#1f2b38',
+  border: '#2e3c4c',
+  text: '#e8edf3',
+  textMuted: '#a9b5c4',
+  primary: '#3b63e0',
   primaryText: '#ffffff',
-  accent: '#60a5fa',
-  accentSoft: '#172554',
-  danger: '#f87171',
-  dangerSoft: '#450a0a',
-  success: '#4ade80',
-  successSoft: '#052e16',
-  warning: '#fbbf24',
-  warningSoft: '#451a03',
+  accent: '#93b1ff',
+  accentSoft: '#1a2a4d',
+  mark: '#f5b13d',
+  danger: '#ff8a80',
+  dangerSoft: '#3d1512',
+  success: '#5fd39a',
+  successSoft: '#0f2e20',
+  warning: '#f5c26b',
+  warningSoft: '#33240a',
 };
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
-export const radius = { sm: 8, md: 12, pill: 999 };
+export const radius = { sm: 8, md: 12, lg: 16, pill: 999 };
+// Escala de texto. Números de contagem usam algarismos tabulares (tabular).
+export const type = { caption: 13, small: 14, body: 16, section: 19, title: 28 };
+export const tabular = { fontVariant: ['tabular-nums' as const] };
 
 export function useColors(): Palette {
   return useColorScheme() === 'dark' ? dark : light;
